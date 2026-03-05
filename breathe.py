@@ -103,12 +103,21 @@ def check_end_signal():
         return True
     return False
 
-def claude_process_exists():
-    """Fallback: is a claude process running at all?"""
+def claude_cpu_check():
+    """CPU-based detection for thinking phase (before tools fire).
+    Returns: 'thinking' if high CPU, 'exists' if process exists, 'absent'."""
     try:
         r = subprocess.run(['pgrep','-f','claude'], capture_output=True, text=True, timeout=2)
-        return r.returncode == 0
-    except: return False
+        if r.returncode != 0: return "absent"
+        mx = 0.0
+        for pid in (p for p in r.stdout.strip().split('\n') if p):
+            try:
+                ps = subprocess.run(['ps','-p',pid,'-o','%cpu='], capture_output=True, text=True, timeout=2)
+                mx = max(mx, float(ps.stdout.strip()))
+            except: pass
+        if mx > 15: return "thinking"
+        return "exists"
+    except: return "absent"
 
 def rot(x,y,z,ax,ay):
     ca,sa=math.cos(ax),math.sin(ax); y2,z2=y*ca-z*sa,y*sa+z*ca
@@ -273,8 +282,8 @@ def main(stdscr):
     state = "idle"  # "idle" or "active"
     idle_t = 0
     orb_phase = 0.0
-    last_start_signal = 0  # timestamp of last start signal
-    claude_exists = False
+    last_activity = 0  # timestamp of last detected activity
+    last_cpu_check = 0
 
     # Clean stale signals on launch
     for f in [HOOK_START_FILE, HOOK_END_FILE]:
@@ -294,14 +303,29 @@ def main(stdscr):
 
         now = time.time()
 
-        # Hook-driven state transitions (reliable, event-based)
+        # === ACTIVATION: hooks + CPU (whichever fires first) ===
+
+        # 1. Hook signal: Claude used a tool
         if check_start_signal():
-            last_start_signal = now
+            last_activity = now
             if state != "active":
                 state = "active"; med_start = now; t0 = now
                 breaths = 0; alert_done = False
                 was_working = True
 
+        # 2. CPU check: Claude is thinking (before any tool fires)
+        if state == "idle" and now - last_cpu_check > CLAUDE_CHECK_SEC:
+            last_cpu_check = now
+            cpu = claude_cpu_check()
+            if cpu == "thinking":
+                last_activity = now
+                state = "active"; med_start = now; t0 = now
+                breaths = 0; alert_done = False
+                was_working = True
+
+        # === DEACTIVATION: end signal or timeout ===
+
+        # 3. Hook signal: Claude stopped or needs input
         if check_end_signal():
             if state == "active":
                 med_total += now - (med_start or now)
@@ -310,14 +334,17 @@ def main(stdscr):
                 alert_done = True
                 if snd: play_alert()
 
-        # If active and no start signal for 30s, check if Claude still exists
-        if state == "active" and (now - last_start_signal) > 30:
-            if not claude_process_exists():
+        # 4. Fallback: active but no activity for 20s, check if Claude is still busy
+        if state == "active" and (now - last_activity) > 20:
+            cpu = claude_cpu_check()
+            if cpu != "thinking":
                 med_total += now - (med_start or now)
                 state = "idle"
                 if not alert_done:
                     alert_done = True
                     if snd: play_alert()
+            else:
+                last_activity = now  # still thinking, reset timer
 
         h,w = stdscr.getmaxyx()
         if h<10 or w<40:
@@ -498,8 +525,9 @@ def main(stdscr):
                 ctr(stdscr, h//2 + 4, msgs[(idle_t//160)%len(msgs)], C[3])
 
                 # Status
-                has_claude = claude_process_exists() if idle_t % 60 == 0 else getattr(main, '_ce', False)
-                main._ce = has_claude
+                if idle_t % 60 == 0:
+                    main._ce = claude_cpu_check() != "absent"
+                has_claude = getattr(main, '_ce', False)
                 st = "◌ claude idle" if has_claude else "○ no claude"
                 ctr(stdscr, h-4, st, C[4])
 
