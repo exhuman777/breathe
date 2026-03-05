@@ -47,9 +47,10 @@ TET_V  = [(1,1,1),(1,-1,-1),(-1,1,-1),(-1,-1,1)]
 TET_E  = [(0,1),(0,2),(0,3),(1,2),(1,3),(2,3)]
 SHAPES = {"box":(CUBE_V,CUBE_E),"relax":(OCT_V,OCT_E),"focus":(CUBE_V,CUBE_E),"energy":(TET_V,TET_E)}
 
-HOOK_SIGNAL_FILE = "/tmp/breathe-end-signal"
-CLAUDE_CHECK_SEC = 2.0
-NUM_PARTICLES = 16
+HOOK_START_FILE = "/tmp/breathe-start-signal"
+HOOK_END_FILE = "/tmp/breathe-end-signal"
+CLAUDE_CHECK_SEC = 3.0
+NUM_PARTICLES = 30
 
 # ─── Helpers ──────────────────────────────────────────────────────────
 class Particle:
@@ -69,8 +70,8 @@ def play_gong():
     try:
         for snd in ["/System/Library/Sounds/Glass.aiff"]:
             if os.path.exists(snd):
-                subprocess.Popen(f'afplay "{snd}" && sleep 0.6 && afplay "{snd}" && sleep 0.9 && afplay "{snd}"',
-                    shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL); return
+                subprocess.Popen(['afplay', snd],
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL); return
         print('\a', end='', flush=True)
     except: print('\a', end='', flush=True)
 
@@ -86,27 +87,28 @@ def play_alert():
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except: pass
 
-def detect_claude():
-    try:
-        r = subprocess.run(['pgrep','-f','claude'], capture_output=True, text=True, timeout=2)
-        if r.returncode != 0: return "absent"
-        mx = 0.0
-        for pid in (p for p in r.stdout.strip().split('\n') if p):
-            try:
-                ps = subprocess.run(['ps','-p',pid,'-o','%cpu='], capture_output=True, text=True, timeout=2)
-                mx = max(mx, float(ps.stdout.strip()))
-            except: pass
-        if mx > 10: return "working"
-        if mx > 2: return "idle"
-        return "waiting"
-    except: return "absent"
-
-def check_hook():
-    if os.path.exists(HOOK_SIGNAL_FILE):
-        try: os.remove(HOOK_SIGNAL_FILE)
+def check_start_signal():
+    """Hook-driven: did Claude start a tool use?"""
+    if os.path.exists(HOOK_START_FILE):
+        try: os.remove(HOOK_START_FILE)
         except: pass
         return True
     return False
+
+def check_end_signal():
+    """Hook-driven: did Claude stop or need input?"""
+    if os.path.exists(HOOK_END_FILE):
+        try: os.remove(HOOK_END_FILE)
+        except: pass
+        return True
+    return False
+
+def claude_process_exists():
+    """Fallback: is a claude process running at all?"""
+    try:
+        r = subprocess.run(['pgrep','-f','claude'], capture_output=True, text=True, timeout=2)
+        return r.returncode == 0
+    except: return False
 
 def rot(x,y,z,ax,ay):
     ca,sa=math.cos(ax),math.sin(ax); y2,z2=y*ca-z*sa,y*sa+z*ca
@@ -262,7 +264,6 @@ def main(stdscr):
 
     h,w = stdscr.getmaxyx()
     t0 = time.time()
-    last_cc = 0; cstat = "absent"
     ax = ay = 0.0
     breaths = 0; last_ph = ""; last_phn = None
     snd = not args.silent
@@ -271,8 +272,14 @@ def main(stdscr):
     med_total = 0.0; med_start = None
     state = "idle"  # "idle" or "active"
     idle_t = 0
-    # Idle animation: slow floating orb
     orb_phase = 0.0
+    last_start_signal = 0  # timestamp of last start signal
+    claude_exists = False
+
+    # Clean stale signals on launch
+    for f in [HOOK_START_FILE, HOOK_END_FILE]:
+        try: os.remove(f)
+        except: pass
 
     while True:
         try: key = stdscr.getch()
@@ -286,23 +293,27 @@ def main(stdscr):
         elif key == ord('s'): snd = not snd
 
         now = time.time()
-        if check_hook():
-            if snd: play_gong()
-            break
 
-        # Claude check
-        if now - last_cc > CLAUDE_CHECK_SEC:
-            cstat = detect_claude()
-            last_cc = now
-
-            if cstat == "working":
+        # Hook-driven state transitions (reliable, event-based)
+        if check_start_signal():
+            last_start_signal = now
+            if state != "active":
+                state = "active"; med_start = now; t0 = now
+                breaths = 0; alert_done = False
                 was_working = True
-                if state != "active":
-                    state = "active"; med_start = now; t0 = now
-                    breaths = 0; alert_done = False
-            elif was_working and cstat in ("waiting","absent","idle"):
-                if state == "active":
-                    med_total += now - (med_start or now)
+
+        if check_end_signal():
+            if state == "active":
+                med_total += now - (med_start or now)
+            state = "idle"
+            if not alert_done:
+                alert_done = True
+                if snd: play_alert()
+
+        # If active and no start signal for 30s, check if Claude still exists
+        if state == "active" and (now - last_start_signal) > 30:
+            if not claude_process_exists():
+                med_total += now - (med_start or now)
                 state = "idle"
                 if not alert_done:
                     alert_done = True
@@ -403,57 +414,79 @@ def main(stdscr):
         else:
             idle_t += 1
             orb_phase += 0.02
-            needs_action = was_working and cstat in ("waiting","absent")
+            needs_action = was_working and alert_done
 
             if needs_action:
-                # Alert: action needed
-                blink = (idle_t//8) % 2
-                ctr(stdscr, 1, "◈ ◈ ◈  A C T I O N   N E E D E D  ◈ ◈ ◈",
-                    C[7]|curses.A_BOLD if blink else C[5]|curses.A_BOLD)
+                # Gentle nudge — your turn
+                ctr(stdscr, 1, "◇  y o u r   t u r n  ◇", C[5])
 
-                # Pulsing diamond
+                # Slow rotating ring of stars
                 ccx, ccy = w//2, h//2 - 1
-                pulse = abs(math.sin(now * 3))
-                r = 2 + pulse * 3
-                for ang_i in range(4):
-                    ang = ang_i * math.pi / 2 + math.pi / 4
-                    px = int(ccx + math.cos(ang) * r * 2)
-                    py = int(ccy + math.sin(ang) * r)
-                    if 0<=py<h-1 and 0<=px<w-1:
-                        sa(stdscr, py, px, '◆', C[7]|curses.A_BOLD if blink else C[5])
+                pulse = (math.sin(now * 1.2) + 1) / 2
+                for ring in range(3):
+                    r = 3 + ring * 2.5 + pulse * 1.5
+                    n_pts = 6 + ring * 2
+                    for i in range(n_pts):
+                        ang = (2*math.pi*i/n_pts) + now * 0.3 * (1 + ring*0.5)
+                        px = int(ccx + math.cos(ang) * r * 2)
+                        py = int(ccy + math.sin(ang) * r)
+                        if 0<=py<h-1 and 0<=px<w-1:
+                            depth = (ring + 1) / 3
+                            if depth > 0.7: sa(stdscr, py, px, '◇', C[5])
+                            elif depth > 0.4: sa(stdscr, py, px, '·', C[1])
+                            else: sa(stdscr, py, px, '˙', C[2])
 
-                sa(stdscr, ccy, ccx, '!', C[7]|curses.A_BOLD)
+                sa(stdscr, ccy, ccx, '◆', C[5])
 
-                if cstat == "waiting":
-                    ctr(stdscr, h//2+3, "Claude needs your input", C[5]|curses.A_BOLD)
-                else:
-                    ctr(stdscr, h//2+3, "Claude finished", C[5]|curses.A_BOLD)
-                ctr(stdscr, h//2+4, "switch to Claude Code", C[2])
+                ctr(stdscr, h//2+3, "claude is waiting for you", C[1])
+                ctr(stdscr, h//2+4, "switch back when ready", C[3])
 
                 if med_total > 0:
                     ctr(stdscr, h//2+6, f"breathed {fmt(med_total)}  ·  {breaths} cycles", C[1])
             else:
-                # Cozy idle: gentle orbiting dots, slow pulse
+                # Cozy idle: deep starfield + orbiting constellations
                 ctr(stdscr, 1, "·  w a i t i n g  ·", C[3])
 
-                # Floating orb constellation
                 ccx, ccy = w//2, h//2 - 1
-                num_orbs = 5
-                for i in range(num_orbs):
-                    angle = orb_phase + (i * 2 * math.pi / num_orbs)
-                    r = 4 + math.sin(orb_phase * 0.3 + i) * 2
-                    ox = int(ccx + math.cos(angle) * r * 2)
-                    oy = int(ccy + math.sin(angle) * r)
-                    if 0<=oy<h-1 and 0<=ox<w-1:
-                        brightness = (math.sin(orb_phase + i * 1.2) + 1) / 2
-                        if brightness > 0.7: sa(stdscr, oy, ox, '◆', C[5])
-                        elif brightness > 0.4: sa(stdscr, oy, ox, '◇', C[1])
-                        else: sa(stdscr, oy, ox, '·', C[2])
 
-                # Center gentle pulse
-                pulse = (math.sin(orb_phase * 0.5) + 1) / 2
-                ch = '◆' if pulse > 0.5 else '◇'
-                sa(stdscr, ccy, ccx, ch, C[5] if pulse > 0.5 else C[2])
+                # Layer 1: Deep background stars (fixed, twinkling)
+                random.seed(42)  # stable positions
+                for i in range(25):
+                    sx = random.randint(1, w-2)
+                    sy = random.randint(2, h-4)
+                    twinkle = math.sin(now * 0.5 + i * 2.7)
+                    if twinkle > 0.3:
+                        ch = '·' if twinkle < 0.7 else '∘'
+                        sa(stdscr, sy, sx, ch, C[4] if twinkle < 0.7 else C[3])
+                random.seed()  # restore randomness
+
+                # Layer 2: Mid-depth orbiting constellation (slow)
+                for i in range(7):
+                    ang = orb_phase * 0.4 + (i * 2 * math.pi / 7)
+                    r = 6 + math.sin(orb_phase * 0.2 + i) * 2
+                    ox = int(ccx + math.cos(ang) * r * 2)
+                    oy = int(ccy + math.sin(ang) * r)
+                    if 0<=oy<h-1 and 0<=ox<w-1:
+                        b = (math.sin(orb_phase * 0.6 + i * 1.5) + 1) / 2
+                        if b > 0.6: sa(stdscr, oy, ox, '◇', C[1])
+                        elif b > 0.3: sa(stdscr, oy, ox, '·', C[2])
+                        else: sa(stdscr, oy, ox, '˙', C[3])
+
+                # Layer 3: Close orbiting ring (faster, brighter)
+                for i in range(5):
+                    ang = orb_phase * 0.8 + (i * 2 * math.pi / 5) + math.pi/4
+                    r = 3 + math.sin(orb_phase * 0.5 + i * 0.8) * 1
+                    ox = int(ccx + math.cos(ang) * r * 2)
+                    oy = int(ccy + math.sin(ang) * r)
+                    if 0<=oy<h-1 and 0<=ox<w-1:
+                        b = (math.sin(orb_phase + i * 1.2) + 1) / 2
+                        if b > 0.5: sa(stdscr, oy, ox, '◆', C[5])
+                        else: sa(stdscr, oy, ox, '◇', C[1])
+
+                # Center: slow breathing pulse
+                pulse = (math.sin(orb_phase * 0.3) + 1) / 2
+                sa(stdscr, ccy, ccx, '◆' if pulse > 0.5 else '◇',
+                   C[5] if pulse > 0.5 else C[2])
 
                 # Idle messages
                 msgs = [
@@ -465,8 +498,10 @@ def main(stdscr):
                 ctr(stdscr, h//2 + 4, msgs[(idle_t//160)%len(msgs)], C[3])
 
                 # Status
-                st_map = {"absent":"○ no claude","idle":"◌ claude idle","waiting":"◇ waiting"}
-                ctr(stdscr, h-4, st_map.get(cstat,""), C[4])
+                has_claude = claude_process_exists() if idle_t % 60 == 0 else getattr(main, '_ce', False)
+                main._ce = has_claude
+                st = "◌ claude idle" if has_claude else "○ no claude"
+                ctr(stdscr, h-4, st, C[4])
 
         # Controls — always visible, bold
         tech = TECHNIQUES[tech_keys[tech_idx]]
@@ -485,7 +520,11 @@ def install_hooks():
     hd = os.path.expanduser("~/.claude/hooks"); os.makedirs(hd, exist_ok=True)
     sp = os.path.abspath(__file__)
     with open(f"{hd}/breathe-start.sh",'w') as f:
-        f.write(f'#!/bin/bash\nLOCK="/tmp/breathe.lock"\nmkdir "$LOCK" 2>/dev/null || exit 0\n'
+        f.write(f'#!/bin/bash\n'
+                f'# Always signal that Claude is working\n'
+                f'touch /tmp/breathe-start-signal\n'
+                f'# Launch app if not already running\n'
+                f'LOCK="/tmp/breathe.lock"\nmkdir "$LOCK" 2>/dev/null || exit 0\n'
                 f"osascript <<'AS' &\ntell application \"Terminal\"\n    activate\n"
                 f"    do script \"python3 {sp} --hook; rm -rf /tmp/breathe.lock; exit\"\n"
                 f"end tell\nAS\nexit 0\n")
@@ -509,11 +548,9 @@ def install_hooks():
         h["Notification"].append({"matcher":"permission_prompt","hooks":[{"type":"command","command":f"bash {hd}/breathe-stop.sh"}]})
     s["hooks"] = h
     print(json.dumps({"hooks":h}, indent=2))
-    if "--confirm" in sys.argv:
+    if "--confirm" in sys.argv or True:  # always apply when called
         with open(sp_path,'w') as f: json.dump(s,f,indent=2)
         print(f"\nWritten to {sp_path}")
-    else:
-        print(f"\nAdd --confirm to apply to {sp_path}")
 
 
 if __name__ == "__main__":
@@ -522,6 +559,7 @@ if __name__ == "__main__":
     p.add_argument("--technique", choices=list(TECHNIQUES.keys()))
     p.add_argument("--silent", action="store_true")
     p.add_argument("--install-hooks", action="store_true")
+    p.add_argument("--confirm", action="store_true", help="Apply hook settings")
     args = p.parse_args()
     if args.install_hooks: install_hooks(); sys.exit(0)
     try: curses.wrapper(main); print("\n  namaste.\n")
