@@ -16,9 +16,9 @@
 </p>
 
 <p align="center">
+  <a href="#how-it-works">How it Works</a> &middot;
   <a href="#techniques">Techniques</a> &middot;
   <a href="#claude-code-hooks">Hooks</a> &middot;
-  <a href="#usage">Usage</a> &middot;
   <a href="https://exhuman777.github.io/breathe">Website</a>
 </p>
 
@@ -32,13 +32,14 @@
 
 ## What
 
-A CLI meditation app that detects when Claude Code is working and lets you breathe in the meantime.
+A CLI meditation companion for developers using Claude Code.
 
-- 3D wireframe geometry that breathes with you
-- 7 breathing techniques (box, 4-7-8, Wim Hof, coherent, calm, energy, focus)
-- Auto-ends when Claude stops working, needs your input, or timer runs out
-- Gong sound on session end
-- Warm amber aesthetic. Floating particles. Zero dependencies.
+**Two modes:**
+
+- **Claude building** → 3D wireframe geometry breathes with you. Guided breathing. Timer.
+- **Claude idle / needs you** → Tamagotchi companion waits. Alerts when action needed.
+
+Meditation starts automatically when Claude starts working. Ends with a gong when Claude finishes or needs your input. Zero deps. Pure Python.
 
 ## Install
 
@@ -47,101 +48,74 @@ A CLI meditation app that detects when Claude Code is working and lets you breat
 curl -fsSL https://raw.githubusercontent.com/exhuman777/breathe/main/breathe.py -o ~/.local/bin/breathe && chmod +x ~/.local/bin/breathe
 ```
 
-Or clone:
 ```bash
+# Clone
 git clone https://github.com/exhuman777/breathe.git
-cd breathe
-python3 breathe.py
+cd breathe && python3 breathe.py
 ```
 
-## Usage
+## How it Works
+
+```
+You give Claude a task
+        ↓
+Claude starts building (high CPU)
+        ↓
+   BREATHE activates → 3D geometry + guided breathing
+        ↓
+Claude finishes / needs input / permission
+        ↓
+   GONG → tamagotchi alert → "ACTION NEEDED"
+        ↓
+You switch back to code
+```
+
+When Claude is idle, a small ASCII companion waits for you. It blinks, looks around, shows rotating messages. Tech-romantic digital pet energy.
+
+## Techniques
+
+| Key | Technique | Pattern | Purpose |
+|-----|-----------|---------|---------|
+| **box** | Box | 4-4-4-4 | Stress control |
+| **relax** | 4-7-8 | 4-7-8 | Deep relaxation |
+| **focus** | Focus | 4-4-6-2 | Clarity |
+| **energy** | Energy | 20x fast + 15s hold | Activation |
+
+Press `t` to cycle techniques during a session. Each maps to a unique 3D wireframe shape.
+
+## Claude Code Hooks
+
+Auto-launch breathe when Claude works. Auto-end when done.
 
 ```bash
-# Interactive technique menu
-python3 breathe.py
-
-# Auto-end when Claude finishes
-python3 breathe.py --claude
-
-# 10 min Wim Hof session
-python3 breathe.py --timer 10 --technique wim
-
-# Silent mode (no sound)
-python3 breathe.py --silent
+python3 breathe.py --install-hooks --confirm
 ```
 
-### Controls
+Three hooks:
+- **PreToolUse** (Bash/Edit/Write) → launches in new Terminal (atomic lock, only one window ever)
+- **Stop** → signals end (Claude finished)
+- **Notification** (permission_prompt) → signals end (Claude needs input)
+
+## Controls
 
 | Key | Action |
 |-----|--------|
 | `t` | Cycle breathing technique |
-| `s` | Toggle sound |
-| `space` | Pause / resume |
-| `r` | Reset timer + breath count |
+| `s` | Toggle sound on/off |
 | `q` / `ESC` | Quit |
 
-## Techniques
+## Sound
 
-| Technique | Pattern | Shape | Purpose |
-|-----------|---------|-------|---------|
-| **Focus** | 4-4-6-2 | Cube | Pre-code clarity |
-| **Box** | 4-4-4-4 | Cube | Navy SEAL stress control |
-| **4-7-8** | 4-7-8-1 | Octahedron | Deep relaxation |
-| **Coherent** | 5.5-5.5 | Cube | HRV optimal (5.5 bpm) |
-| **Wim Hof** | 30x fast + 60s hold | Tetrahedron | Power breathing |
-| **Calm** | 4-8-1 | Octahedron | Extended exhale |
-| **Energy** | 20x fast + 15s hold | Tetrahedron | Kapalabhati activation |
-
-Each technique maps to a unique 3D wireframe shape that rotates and scales with your breath.
-
-## Claude Code Hooks
-
-Auto-launch breathe when Claude starts working. Auto-end when Claude finishes or needs you.
-
-```bash
-# Preview hook config
-python3 breathe.py --install-hooks
-
-# Install (writes to ~/.claude/settings.json)
-python3 breathe.py --install-hooks --confirm
-```
-
-This adds three hooks:
-- **PreToolUse** (Bash/Edit/Write) — launches breathe in a new Terminal window
-- **Stop** — signals breathe to end (Claude finished)
-- **Notification** (permission_prompt) — signals breathe to end (Claude needs input)
-
-### How it works
-
-```
-Claude starts building
-        ↓
-   Hook fires (PreToolUse)
-        ↓
-   breathe launches in new Terminal
-        ↓
-   You meditate while Claude works
-        ↓
-   Claude finishes / needs input
-        ↓
-   Hook fires (Stop / Notification)
-        ↓
-   Gong plays. Session complete.
-        ↓
-   Back to coding.
-```
+- **Gong** (Glass.aiff x3) → session end
+- **Alert** (Funk.aiff) → action needed
+- **Tick** (Tink.aiff) → breath phase transitions
+- `--silent` flag or `s` key to mute
 
 ## Requirements
 
 - Python 3.6+
-- macOS (for Terminal.app hooks + system sounds)
-- A terminal that supports Unicode and 256 colors
-
-## Sound
-
-- **Gong** (Glass.aiff x3) plays on session end
-- **Tick** (Tink.aiff) plays on breath phase transitions
-- Toggle with `s` key or `--silent` flag
+- macOS (Terminal.app hooks + system sounds)
+- Terminal with Unicode + 256 colors
 
 ---
 
