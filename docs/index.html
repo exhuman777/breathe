@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BREATHE — Meditation for Vibe Coders</title>
+<meta name="description" content="CLI meditation app that detects when Claude Code is working. Breathe while it builds. Gong when it's time to code again.">
+<meta property="og:title" content="BREATHE — Meditation for Vibe Coders">
+<meta property="og:description" content="Breathe while Claude builds. Gong when it's time to code again.">
+<meta property="og:type" content="website">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&display=swap');
+
+  :root {
+    --bg: #0d0b0a;
+    --surface: #1a1614;
+    --border: #2a2320;
+    --ghost: #332b25;
+    --dim: #665840;
+    --amber: #e6993a;
+    --bright: #ffb347;
+    --text: #c4a882;
+    --muted: #8a7560;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'JetBrains Mono', monospace;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+    position: relative;
+  }
+
+  canvas#particles {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .content {
+    position: relative;
+    z-index: 1;
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 80px 24px;
+  }
+
+  .logo {
+    text-align: center;
+    margin-bottom: 16px;
+  }
+
+  .logo pre {
+    font-size: 10px;
+    line-height: 1.2;
+    color: var(--amber);
+    display: inline-block;
+    letter-spacing: 1px;
+  }
+
+  h1 {
+    text-align: center;
+    font-size: 14px;
+    font-weight: 400;
+    letter-spacing: 12px;
+    text-transform: uppercase;
+    color: var(--bright);
+    margin-bottom: 8px;
+  }
+
+  .subtitle {
+    text-align: center;
+    color: var(--muted);
+    font-size: 12px;
+    letter-spacing: 2px;
+    margin-bottom: 60px;
+  }
+
+  .hero-quote {
+    text-align: center;
+    color: var(--amber);
+    font-size: 13px;
+    font-style: italic;
+    margin-bottom: 60px;
+    padding: 24px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+  }
+
+  .section {
+    margin-bottom: 48px;
+  }
+
+  .section-title {
+    font-size: 11px;
+    letter-spacing: 6px;
+    text-transform: uppercase;
+    color: var(--dim);
+    margin-bottom: 20px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .install-block {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 20px 24px;
+    margin-bottom: 24px;
+    position: relative;
+  }
+
+  .install-block code {
+    color: var(--bright);
+    font-size: 13px;
+    word-break: break-all;
+  }
+
+  .install-block .label {
+    font-size: 10px;
+    color: var(--dim);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
+  .techniques {
+    display: grid;
+    gap: 12px;
+  }
+
+  .technique {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 16px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: border-color 0.3s;
+  }
+
+  .technique:hover {
+    border-color: var(--amber);
+  }
+
+  .technique .name {
+    color: var(--bright);
+    font-size: 12px;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+  }
+
+  .technique .pattern {
+    color: var(--dim);
+    font-size: 11px;
+    letter-spacing: 1px;
+  }
+
+  .technique .desc {
+    color: var(--muted);
+    font-size: 11px;
+    margin-top: 4px;
+  }
+
+  .flow {
+    text-align: center;
+    padding: 24px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+  }
+
+  .flow .step {
+    color: var(--muted);
+    font-size: 11px;
+    letter-spacing: 2px;
+    padding: 6px 0;
+  }
+
+  .flow .step.active {
+    color: var(--amber);
+  }
+
+  .flow .arrow {
+    color: var(--ghost);
+    font-size: 14px;
+  }
+
+  .features {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+
+  .feature {
+    padding: 16px;
+    border: 1px solid var(--border);
+  }
+
+  .feature .icon {
+    color: var(--amber);
+    font-size: 16px;
+    margin-bottom: 8px;
+  }
+
+  .feature .title {
+    color: var(--bright);
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+
+  .feature .desc {
+    color: var(--muted);
+    font-size: 11px;
+  }
+
+  .footer {
+    text-align: center;
+    padding-top: 48px;
+    border-top: 1px solid var(--border);
+    margin-top: 48px;
+  }
+
+  .footer a {
+    color: var(--dim);
+    text-decoration: none;
+    font-size: 11px;
+    letter-spacing: 2px;
+    transition: color 0.3s;
+  }
+
+  .footer a:hover { color: var(--amber); }
+
+  .footer .links {
+    display: flex;
+    justify-content: center;
+    gap: 24px;
+    margin-bottom: 16px;
+  }
+
+  .footer .credit {
+    color: var(--ghost);
+    font-size: 10px;
+    letter-spacing: 3px;
+  }
+
+  .breath-demo {
+    text-align: center;
+    padding: 40px;
+    margin-bottom: 24px;
+  }
+
+  .breath-circle {
+    width: 80px;
+    height: 80px;
+    border: 2px solid var(--amber);
+    border-radius: 50%;
+    margin: 0 auto 16px;
+    animation: breathe 16s ease-in-out infinite;
+    opacity: 0.6;
+  }
+
+  .breath-label {
+    color: var(--amber);
+    font-size: 11px;
+    letter-spacing: 4px;
+    text-transform: uppercase;
+    animation: breathe-text 16s ease-in-out infinite;
+  }
+
+  @keyframes breathe {
+    0%, 100% { transform: scale(0.6); opacity: 0.3; }
+    25% { transform: scale(1.0); opacity: 0.8; }
+    50% { transform: scale(1.0); opacity: 0.8; }
+    62.5% { transform: scale(1.0); opacity: 0.8; }
+    100% { transform: scale(0.6); opacity: 0.3; }
+  }
+
+  @keyframes breathe-text {
+    0%, 100% { opacity: 0.3; }
+    25% { opacity: 1; }
+    50% { opacity: 1; }
+    62.5% { opacity: 1; }
+    100% { opacity: 0.3; }
+  }
+
+  @media (max-width: 600px) {
+    .features { grid-template-columns: 1fr; }
+    .logo pre { font-size: 6px; }
+    h1 { letter-spacing: 8px; font-size: 12px; }
+  }
+</style>
+</head>
+<body>
+
+<canvas id="particles"></canvas>
+
+<div class="content">
+
+  <div class="logo">
+<pre>
+██████╗ ██████╗ ███████╗ █████╗ ████████╗██╗  ██╗███████╗
+██╔══██╗██╔══██╗██╔════╝██╔══██╗╚══██╔══╝██║  ██║██╔════╝
+██████╔╝██████╔╝█████╗  ███████║   ██║   ███████║█████╗
+██╔══██╗██╔══██╗██╔══╝  ██╔══██║   ██║   ██╔══██║██╔══╝
+██████╔╝██║  ██║███████╗██║  ██║   ██║   ██║  ██║███████╗
+╚═════╝ ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝   ╚═╝   ╚═╝  ╚═╝╚══════╝
+</pre>
+  </div>
+
+  <h1>Breathe</h1>
+  <div class="subtitle">meditation for vibe coders</div>
+
+  <div class="hero-quote">
+    "Breathe while Claude builds. Gong when it's time to code again."
+  </div>
+
+  <div class="breath-demo">
+    <div class="breath-circle"></div>
+    <div class="breath-label">focus</div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Install</div>
+    <div class="install-block">
+      <div class="label">one-liner</div>
+      <code>curl -fsSL https://raw.githubusercontent.com/exhuman777/breathe/main/breathe.py -o ~/.local/bin/breathe && chmod +x ~/.local/bin/breathe</code>
+    </div>
+    <div class="install-block">
+      <div class="label">or clone</div>
+      <code>git clone https://github.com/exhuman777/breathe.git && cd breathe && python3 breathe.py</code>
+    </div>
+    <div class="install-block">
+      <div class="label">claude code hooks</div>
+      <code>python3 breathe.py --install-hooks --confirm</code>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Techniques</div>
+    <div class="techniques">
+      <div class="technique">
+        <div>
+          <div class="name">Focus</div>
+          <div class="desc">Pre-code clarity</div>
+        </div>
+        <div class="pattern">4 - 4 - 6 - 2</div>
+      </div>
+      <div class="technique">
+        <div>
+          <div class="name">Box</div>
+          <div class="desc">Navy SEAL stress control</div>
+        </div>
+        <div class="pattern">4 - 4 - 4 - 4</div>
+      </div>
+      <div class="technique">
+        <div>
+          <div class="name">4-7-8</div>
+          <div class="desc">Dr. Weil relaxation response</div>
+        </div>
+        <div class="pattern">4 - 7 - 8</div>
+      </div>
+      <div class="technique">
+        <div>
+          <div class="name">Coherent</div>
+          <div class="desc">HRV optimal 5.5 bpm</div>
+        </div>
+        <div class="pattern">5.5 - 5.5</div>
+      </div>
+      <div class="technique">
+        <div>
+          <div class="name">Wim Hof</div>
+          <div class="desc">Power breathing</div>
+        </div>
+        <div class="pattern">30x fast + 60s hold</div>
+      </div>
+      <div class="technique">
+        <div>
+          <div class="name">Calm</div>
+          <div class="desc">Extended exhale</div>
+        </div>
+        <div class="pattern">4 - 8</div>
+      </div>
+      <div class="technique">
+        <div>
+          <div class="name">Energy</div>
+          <div class="desc">Kapalabhati activation</div>
+        </div>
+        <div class="pattern">20x fast + 15s hold</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">How It Works</div>
+    <div class="flow">
+      <div class="step active">Claude starts building</div>
+      <div class="arrow">↓</div>
+      <div class="step">Hook launches breathe in new terminal</div>
+      <div class="arrow">↓</div>
+      <div class="step active">You meditate. 3D geometry breathes with you.</div>
+      <div class="arrow">↓</div>
+      <div class="step">Claude finishes or needs input</div>
+      <div class="arrow">↓</div>
+      <div class="step active">Gong. Session complete. Back to code.</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Features</div>
+    <div class="features">
+      <div class="feature">
+        <div class="icon">◆</div>
+        <div class="title">3D Wireframes</div>
+        <div class="desc">Cube, octahedron, tetrahedron. Rotating, breathing, depth-shaded.</div>
+      </div>
+      <div class="feature">
+        <div class="icon">●</div>
+        <div class="title">Claude Detection</div>
+        <div class="desc">Knows when Claude is building, idle, or needs you.</div>
+      </div>
+      <div class="feature">
+        <div class="icon">♪</div>
+        <div class="title">Gong</div>
+        <div class="desc">Triple glass chime on session end. Tick on breath transitions.</div>
+      </div>
+      <div class="feature">
+        <div class="icon">◇</div>
+        <div class="title">Zero Deps</div>
+        <div class="desc">Pure Python. curses. Nothing to install.</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div class="links">
+      <a href="https://github.com/exhuman777/breathe">GitHub</a>
+      <a href="https://github.com/exhuman777">exhuman</a>
+    </div>
+    <div class="credit">breathe between the builds</div>
+  </div>
+
+</div>
+
+<script>
+// Floating particles — Invisible Architecture aesthetic
+const canvas = document.getElementById('particles');
+const ctx = canvas.getContext('2d');
+
+function resize() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+const particles = [];
+const NUM = 40;
+
+for (let i = 0; i < NUM; i++) {
+  particles.push({
+    x: Math.random() * canvas.width,
+    y: Math.random() * canvas.height,
+    vx: (Math.random() - 0.5) * 0.3,
+    vy: -Math.random() * 0.2 - 0.05,
+    size: Math.random() * 2 + 0.5,
+    life: Math.random(),
+    decay: 0.0005 + Math.random() * 0.001,
+  });
+}
+
+function animate() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  for (const p of particles) {
+    p.x += p.vx;
+    p.y += p.vy;
+    p.life -= p.decay;
+
+    if (p.life <= 0 || p.y < 0) {
+      p.x = Math.random() * canvas.width;
+      p.y = canvas.height + 10;
+      p.life = 1;
+    }
+
+    const alpha = p.life * 0.4;
+    ctx.fillStyle = `rgba(230, 153, 58, ${alpha})`;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  requestAnimationFrame(animate);
+}
+
+animate();
+</script>
+
+</body>
+</html>
