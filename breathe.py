@@ -435,7 +435,11 @@ def main(stdscr):
         end_session = False
 
         if check_end_signal() and state == "active":
-            end_session = True
+            # Multiple Claudes? Only end when NONE are still thinking.
+            cpu = claude_cpu_check()
+            if cpu != "thinking":
+                end_session = True
+            # else: another Claude still working, keep meditating
 
         if state == "active" and (now - last_activity) > 20:
             cpu = claude_cpu_check()
