@@ -3,17 +3,18 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BREATHE — Meditation for Vibe Coders</title>
-<meta name="description" content="CLI meditation app that detects when Claude Code is working. Breathe while it builds. Gong when it's time to code again.">
-<meta property="og:title" content="BREATHE — Meditation for Vibe Coders">
-<meta property="og:description" content="Breathe while Claude builds. Gong when it's time to code again.">
+<title>BREAITH — Meditation for Vibe Coders</title>
+<meta name="description" content="The practice for the AI age. Breathe while Claude builds. The first meditation methodology designed for developers working with AI.">
+<meta property="og:title" content="BREAITH — Meditation for Vibe Coders">
+<meta property="og:description" content="AI writes your code. What do you do with the silence? The first meditation methodology designed for developers working with AI.">
 <meta property="og:type" content="website">
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Instrument+Serif&display=swap');
 
   :root {
     --bg: #0d0b0a;
-    --surface: #1a1614;
+    --surface: #141210;
+    --surface2: #1a1614;
     --border: #2a2320;
     --ghost: #332b25;
     --dim: #665840;
@@ -21,6 +22,7 @@
     --bright: #ffb347;
     --text: #c4a882;
     --muted: #8a7560;
+    --faint: #4a3f35;
   }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -31,7 +33,6 @@
     color: var(--text);
     min-height: 100vh;
     overflow-x: hidden;
-    position: relative;
   }
 
   canvas#particles {
@@ -45,59 +46,77 @@
   .content {
     position: relative;
     z-index: 1;
-    max-width: 720px;
+    max-width: 740px;
     margin: 0 auto;
-    padding: 80px 24px;
+    padding: 60px 24px 80px;
   }
 
-  .logo {
-    text-align: center;
-    margin-bottom: 16px;
+  /* Nav */
+  .nav {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 60px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border);
   }
-
-  .logo pre {
-    font-size: 10px;
-    line-height: 1.2;
+  .nav-brand {
     color: var(--amber);
-    display: inline-block;
-    letter-spacing: 1px;
-  }
-
-  h1 {
-    text-align: center;
-    font-size: 14px;
-    font-weight: 400;
-    letter-spacing: 12px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 4px;
     text-transform: uppercase;
-    color: var(--bright);
-    margin-bottom: 8px;
+    text-decoration: none;
   }
-
-  .subtitle {
-    text-align: center;
+  .nav-links { display: flex; gap: 20px; }
+  .nav-links a {
     color: var(--muted);
-    font-size: 12px;
-    letter-spacing: 2px;
-    margin-bottom: 60px;
+    text-decoration: none;
+    font-size: 11px;
+    letter-spacing: 1px;
+    transition: color 0.3s;
+  }
+  .nav-links a:hover, .nav-links a.active { color: var(--amber); }
+
+  /* Hero */
+  h1 {
+    font-family: 'Instrument Serif', serif;
+    font-size: clamp(36px, 6vw, 56px);
+    font-weight: 400;
+    color: var(--bright);
+    line-height: 1.15;
+    margin-bottom: 20px;
   }
 
-  .hero-quote {
-    text-align: center;
-    color: var(--amber);
+  .hero-sub {
     font-size: 13px;
-    font-style: italic;
-    margin-bottom: 60px;
-    padding: 24px;
-    border: 1px solid var(--border);
-    background: var(--surface);
+    color: var(--muted);
+    letter-spacing: 1px;
+    line-height: 1.8;
+    max-width: 540px;
+    margin-bottom: 32px;
   }
 
-  .section {
+  .hero-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
     margin-bottom: 48px;
   }
+  .hero-tags span {
+    font-size: 10px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--dim);
+    padding: 5px 12px;
+    border: 1px solid var(--border);
+  }
+
+  /* Sections */
+  .section { margin-bottom: 56px; }
 
   .section-title {
-    font-size: 11px;
+    font-size: 10px;
     letter-spacing: 6px;
     text-transform: uppercase;
     color: var(--dim);
@@ -106,193 +125,304 @@
     border-bottom: 1px solid var(--border);
   }
 
+  /* Quote Block */
+  .quote-block {
+    padding: 28px 32px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    margin-bottom: 32px;
+  }
+  .quote-block .quote-text {
+    font-family: 'Instrument Serif', serif;
+    font-size: 18px;
+    color: var(--amber);
+    font-style: italic;
+    line-height: 1.6;
+    margin-bottom: 12px;
+  }
+  .quote-block .quote-source {
+    font-size: 10px;
+    color: var(--dim);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+
+  /* Stat Grid */
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 32px;
+  }
+  .stat {
+    padding: 20px 16px;
+    border: 1px solid var(--border);
+    text-align: center;
+  }
+  .stat .number {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--bright);
+    margin-bottom: 6px;
+  }
+  .stat .label {
+    font-size: 9px;
+    color: var(--dim);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    line-height: 1.4;
+  }
+
+  /* Prose */
+  .prose {
+    font-size: 12px;
+    color: var(--text);
+    line-height: 1.9;
+    margin-bottom: 24px;
+  }
+  .prose strong { color: var(--bright); font-weight: 500; }
+  .prose em { color: var(--amber); font-style: normal; }
+
+  /* Card Grid */
+  .card-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+  .card {
+    padding: 20px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .card .title {
+    color: var(--bright);
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .card .desc {
+    color: var(--muted);
+    font-size: 11px;
+    line-height: 1.7;
+  }
+
+  /* Breath Demo */
+  .breath-demo {
+    text-align: center;
+    padding: 48px 24px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    margin-bottom: 32px;
+  }
+  .breath-circle {
+    width: 100px;
+    height: 100px;
+    border: 2px solid var(--amber);
+    border-radius: 50%;
+    margin: 0 auto 20px;
+    animation: breathe 16s ease-in-out infinite;
+    opacity: 0.6;
+  }
+  .breath-label {
+    color: var(--amber);
+    font-size: 10px;
+    letter-spacing: 6px;
+    text-transform: uppercase;
+    animation: breathe-text 16s ease-in-out infinite;
+  }
+  .breath-sublabel {
+    color: var(--dim);
+    font-size: 10px;
+    letter-spacing: 2px;
+    margin-top: 8px;
+  }
+
+  @keyframes breathe {
+    0%, 100% { transform: scale(0.5); opacity: 0.2; }
+    25% { transform: scale(1.0); opacity: 0.7; }
+    50% { transform: scale(1.0); opacity: 0.7; }
+    75% { transform: scale(0.5); opacity: 0.2; }
+  }
+  @keyframes breathe-text {
+    0%, 100% { opacity: 0.3; }
+    25%, 50% { opacity: 1; }
+    75% { opacity: 0.3; }
+  }
+
+  /* Flow */
+  .flow {
+    padding: 28px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    text-align: center;
+    margin-bottom: 24px;
+  }
+  .flow .step {
+    color: var(--muted);
+    font-size: 11px;
+    letter-spacing: 2px;
+    padding: 8px 0;
+  }
+  .flow .step.active { color: var(--amber); }
+  .flow .arrow { color: var(--ghost); font-size: 14px; }
+
+  /* Install */
   .install-block {
     background: var(--surface);
     border: 1px solid var(--border);
     padding: 20px 24px;
-    margin-bottom: 24px;
-    position: relative;
+    margin-bottom: 12px;
   }
-
-  .install-block code {
-    color: var(--bright);
-    font-size: 13px;
-    word-break: break-all;
-  }
-
   .install-block .label {
-    font-size: 10px;
+    font-size: 9px;
     color: var(--dim);
     letter-spacing: 3px;
     text-transform: uppercase;
     margin-bottom: 8px;
   }
-
-  .techniques {
-    display: grid;
-    gap: 12px;
+  .install-block code {
+    color: var(--bright);
+    font-size: 12px;
+    word-break: break-all;
+    line-height: 1.6;
   }
 
+  /* Techniques */
+  .techniques { display: grid; gap: 8px; }
   .technique {
     background: var(--surface);
     border: 1px solid var(--border);
-    padding: 16px 20px;
+    padding: 14px 20px;
     display: flex;
     justify-content: space-between;
     align-items: center;
     transition: border-color 0.3s;
   }
-
-  .technique:hover {
-    border-color: var(--amber);
-  }
-
+  .technique:hover { border-color: var(--amber); }
   .technique .name {
     color: var(--bright);
-    font-size: 12px;
-    letter-spacing: 4px;
+    font-size: 11px;
+    letter-spacing: 3px;
     text-transform: uppercase;
   }
-
   .technique .pattern {
     color: var(--dim);
     font-size: 11px;
     letter-spacing: 1px;
   }
-
   .technique .desc {
     color: var(--muted);
-    font-size: 11px;
-    margin-top: 4px;
+    font-size: 10px;
+    margin-top: 2px;
   }
 
-  .flow {
-    text-align: center;
-    padding: 24px;
-    background: var(--surface);
-    border: 1px solid var(--border);
+  /* Marquee */
+  .marquee-wrap {
+    overflow: hidden;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    padding: 10px 0;
+    margin-bottom: 48px;
+    margin-top: 48px;
   }
-
-  .flow .step {
-    color: var(--muted);
-    font-size: 11px;
-    letter-spacing: 2px;
-    padding: 6px 0;
+  .marquee {
+    display: flex;
+    gap: 40px;
+    animation: scroll 30s linear infinite;
+    white-space: nowrap;
   }
-
-  .flow .step.active {
-    color: var(--amber);
-  }
-
-  .flow .arrow {
-    color: var(--ghost);
-    font-size: 14px;
-  }
-
-  .features {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px;
-  }
-
-  .feature {
-    padding: 16px;
-    border: 1px solid var(--border);
-  }
-
-  .feature .icon {
-    color: var(--amber);
-    font-size: 16px;
-    margin-bottom: 8px;
-  }
-
-  .feature .title {
-    color: var(--bright);
-    font-size: 11px;
-    letter-spacing: 2px;
+  .marquee span {
+    font-size: 10px;
+    letter-spacing: 4px;
     text-transform: uppercase;
-    margin-bottom: 4px;
+    color: var(--faint);
+  }
+  @keyframes scroll {
+    from { transform: translateX(0); }
+    to { transform: translateX(-50%); }
   }
 
-  .feature .desc {
-    color: var(--muted);
+  /* Thesis */
+  .thesis {
+    padding: 32px;
+    border: 1px solid var(--amber);
+    background: rgba(230, 153, 58, 0.04);
+    text-align: center;
+    margin-bottom: 32px;
+  }
+  .thesis .thesis-text {
+    font-family: 'Instrument Serif', serif;
+    font-size: 20px;
+    color: var(--amber);
+    line-height: 1.6;
+    margin-bottom: 12px;
+  }
+  .thesis .thesis-sub {
+    font-size: 10px;
+    color: var(--dim);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+  }
+
+  /* Research List */
+  .research-list {
+    list-style: none;
+    margin-bottom: 24px;
+  }
+  .research-list li {
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
     font-size: 11px;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+  .research-list li strong {
+    color: var(--bright);
+    font-weight: 500;
+  }
+  .research-list li .src {
+    color: var(--dim);
+    font-size: 9px;
+    letter-spacing: 1px;
   }
 
+  /* Footer */
   .footer {
     text-align: center;
     padding-top: 48px;
     border-top: 1px solid var(--border);
     margin-top: 48px;
   }
-
-  .footer a {
-    color: var(--dim);
-    text-decoration: none;
-    font-size: 11px;
-    letter-spacing: 2px;
-    transition: color 0.3s;
-  }
-
-  .footer a:hover { color: var(--amber); }
-
   .footer .links {
     display: flex;
     justify-content: center;
     gap: 24px;
     margin-bottom: 16px;
   }
-
+  .footer a {
+    color: var(--dim);
+    text-decoration: none;
+    font-size: 11px;
+    letter-spacing: 2px;
+    padding: 6px 14px;
+    border: 1px solid var(--border);
+    transition: all 0.3s;
+  }
+  .footer a:hover { color: var(--amber); border-color: var(--amber); }
   .footer .credit {
     color: var(--ghost);
     font-size: 10px;
     letter-spacing: 3px;
-  }
-
-  .breath-demo {
-    text-align: center;
-    padding: 40px;
-    margin-bottom: 24px;
-  }
-
-  .breath-circle {
-    width: 80px;
-    height: 80px;
-    border: 2px solid var(--amber);
-    border-radius: 50%;
-    margin: 0 auto 16px;
-    animation: breathe 16s ease-in-out infinite;
-    opacity: 0.6;
-  }
-
-  .breath-label {
-    color: var(--amber);
-    font-size: 11px;
-    letter-spacing: 4px;
-    text-transform: uppercase;
-    animation: breathe-text 16s ease-in-out infinite;
-  }
-
-  @keyframes breathe {
-    0%, 100% { transform: scale(0.6); opacity: 0.3; }
-    25% { transform: scale(1.0); opacity: 0.8; }
-    50% { transform: scale(1.0); opacity: 0.8; }
-    62.5% { transform: scale(1.0); opacity: 0.8; }
-    100% { transform: scale(0.6); opacity: 0.3; }
-  }
-
-  @keyframes breathe-text {
-    0%, 100% { opacity: 0.3; }
-    25% { opacity: 1; }
-    50% { opacity: 1; }
-    62.5% { opacity: 1; }
-    100% { opacity: 0.3; }
+    margin-top: 16px;
   }
 
   @media (max-width: 600px) {
-    .features { grid-template-columns: 1fr; }
-    .logo pre { font-size: 6px; }
-    h1 { letter-spacing: 8px; font-size: 12px; }
+    .stat-grid { grid-template-columns: 1fr; }
+    .card-grid { grid-template-columns: 1fr; }
+    h1 { font-size: 32px; }
+    .content { padding: 40px 16px; }
   }
 </style>
 </head>
@@ -302,55 +432,209 @@
 
 <div class="content">
 
-  <div class="logo">
-<pre>
-██████╗ ██████╗ ███████╗ █████╗ ████████╗██╗  ██╗███████╗
-██╔══██╗██╔══██╗██╔════╝██╔══██╗╚══██╔══╝██║  ██║██╔════╝
-██████╔╝██████╔╝█████╗  ███████║   ██║   ███████║█████╗
-██╔══██╗██╔══██╗██╔══╝  ██╔══██║   ██║   ██╔══██║██╔══╝
-██████╔╝██║  ██║███████╗██║  ██║   ██║   ██║  ██║███████╗
-╚═════╝ ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝   ╚═╝   ╚═╝  ╚═╝╚══════╝
-</pre>
+  <nav class="nav">
+    <a href="#" class="nav-brand">EXHUMAN</a>
+    <div class="nav-links">
+      <a href="https://o.zo.space/exhuman">Home</a>
+      <a href="https://github.com/exhuman777/breathe">GitHub</a>
+      <a href="#install" class="active">BREAITH</a>
+    </div>
+  </nav>
+
+  <!-- Hero -->
+  <h1>BREAITH</h1>
+  <p class="hero-sub">
+    AI writes your code. What do you do with the silence?<br>
+    The first meditation methodology designed for developers working with AI.
+    Breathe while Claude builds. Gong when it's your turn.
+  </p>
+  <div class="hero-tags">
+    <span>vibecoding</span>
+    <span>meditation</span>
+    <span>claude code</span>
+    <span>breathwork</span>
+    <span>flow state</span>
+    <span>zero deps</span>
+    <span>python</span>
   </div>
 
-  <h1>Breathe</h1>
-  <div class="subtitle">meditation for vibe coders</div>
-
-  <div class="hero-quote">
-    "Breathe while Claude builds. Gong when it's time to code again."
-  </div>
-
-  <div class="breath-demo">
-    <div class="breath-circle"></div>
-    <div class="breath-label">focus</div>
-  </div>
-
+  <!-- The Problem -->
   <div class="section">
-    <div class="section-title">Install</div>
-    <div class="install-block">
-      <div class="label">one-liner</div>
-      <code>curl -fsSL https://raw.githubusercontent.com/exhuman777/breathe/main/breathe.py -o ~/.local/bin/breathe && chmod +x ~/.local/bin/breathe</code>
+    <div class="section-title">The Problem</div>
+
+    <div class="quote-block">
+      <div class="quote-text">"I shipped more code last quarter than any quarter in my career. But I burned out. I didn't quit or have a breakdown, but just stopped caring."</div>
+      <div class="quote-source">Siddhant Khare, Software Engineer &mdash; covered by Business Insider, Techmeme</div>
     </div>
-    <div class="install-block">
-      <div class="label">or clone</div>
-      <code>git clone https://github.com/exhuman777/breathe.git && cd breathe && python3 breathe.py</code>
+
+    <p class="prose">
+      Something broke in the developer experience. AI writes code faster than we can understand it.
+      <strong>The bottleneck moved from creation to comprehension.</strong> From typing to being present.
+      You used to build. Now you review, validate, decide, re-prompt, repeat.
+      <em>Creating is energizing. Reviewing is draining.</em>
+    </p>
+
+    <div class="stat-grid">
+      <div class="stat">
+        <div class="number">65%</div>
+        <div class="label">of AI-using devs report burnout</div>
+      </div>
+      <div class="stat">
+        <div class="number">19%</div>
+        <div class="label">slower with AI (METR controlled study)</div>
+      </div>
+      <div class="stat">
+        <div class="number">39pt</div>
+        <div class="label">perception gap: think faster, actually slower</div>
+      </div>
     </div>
-    <div class="install-block">
-      <div class="label">claude code hooks</div>
-      <code>python3 breathe.py --install-hooks --confirm</code>
+
+    <p class="prose">
+      The METR study (randomized controlled trial, 16 experienced open-source devs, 246 real issues) found developers were
+      <strong>19% slower with AI tools</strong>. Yet they believed they were 20% faster.
+      The gap between perception and reality: 39 percentage points.
+      We're not just tired. We don't even know we're tired.
+    </p>
+  </div>
+
+  <!-- The Waiting -->
+  <div class="section">
+    <div class="section-title">The Waiting Problem</div>
+
+    <div class="quote-block">
+      <div class="quote-text">"With vibe coding, the coding happens so fast that the brain can't process what is happening in real time. Complex tasks are compressed into seconds. Stress hormones release alongside dopamine, resulting in fatigue instead of satisfaction."</div>
+      <div class="quote-source">Tabula Magazine &mdash; "Too Fast to Think"</div>
+    </div>
+
+    <div class="card-grid">
+      <div class="card">
+        <div class="title">Ghost in the Loop</div>
+        <div class="desc">You're no longer the creator. You're the validator. A spectral presence hovering over AI output, checking correctness. The cost moved downstream: from building to auditing. Quiet exhaustion that doesn't show in metrics.</div>
+      </div>
+      <div class="card">
+        <div class="title">Dark Flow</div>
+        <div class="desc">Jeremy Howard (fast.ai) warns of "junk flow" from AI tools. Like slot machines, LLMs are tuned to maximize your psychological reaction. You lose the ability to assess your own productivity.</div>
+      </div>
+      <div class="card">
+        <div class="title">Context Switching</div>
+        <div class="desc">"I might touch six different problems in a day. Each only takes an hour with AI. But context-switching between six problems is brutally expensive for the human brain." The velocity is real. The cognitive cost is hidden.</div>
+      </div>
+      <div class="card">
+        <div class="title">The Waiting Anxiety</div>
+        <div class="desc">Claude is thinking. You don't know how long. Research shows uncertain waits feel significantly longer. The impulse: check Twitter, open another tab, fragment attention further. Every time.</div>
+      </div>
+    </div>
+
+    <p class="prose">
+      When Claude went down, developers panicked.
+      <strong>"I guess I'll write code like a caveman."</strong>
+      Bloomberg reported AI coding agents <em>promised to make development easier,
+      but kicked off a high-pressure race to build at any cost.</em>
+      The productivity paradox is real: AI doesn't reduce work. It intensifies it.
+    </p>
+  </div>
+
+  <!-- Marquee -->
+  <div class="marquee-wrap">
+    <div class="marquee">
+      <span>vibecoding</span><span>&#183;</span>
+      <span>breathwork</span><span>&#183;</span>
+      <span>flow state</span><span>&#183;</span>
+      <span>meditation</span><span>&#183;</span>
+      <span>claude code</span><span>&#183;</span>
+      <span>presence</span><span>&#183;</span>
+      <span>stillness</span><span>&#183;</span>
+      <span>wellbeing</span><span>&#183;</span>
+      <span>being mode</span><span>&#183;</span>
+      <span>AI age</span><span>&#183;</span>
+      <span>vibecoding</span><span>&#183;</span>
+      <span>breathwork</span><span>&#183;</span>
+      <span>flow state</span><span>&#183;</span>
+      <span>meditation</span><span>&#183;</span>
+      <span>claude code</span><span>&#183;</span>
+      <span>presence</span><span>&#183;</span>
+      <span>stillness</span><span>&#183;</span>
+      <span>wellbeing</span><span>&#183;</span>
+      <span>being mode</span><span>&#183;</span>
+      <span>AI age</span><span>&#183;</span>
     </div>
   </div>
 
+  <!-- The Thesis -->
+  <div class="section">
+    <div class="section-title">The Thesis</div>
+
+    <div class="thesis">
+      <div class="thesis-text">While developers wait for Claude to think, they could be practicing the one skill AI cannot replicate: presence.</div>
+      <div class="thesis-sub">BREAITH &mdash; The practice for the AI age</div>
+    </div>
+
+    <p class="prose">
+      <strong>AI will give humans more free time.</strong> Not vacation time. Idle time. Waiting time.
+      Micro-moments where the machine is doing and you're... what? Scrolling? Anxious?
+      The biggest challenge of the AI age isn't learning to use tools.
+      It's learning to BE when AI handles the DOING.
+    </p>
+
+    <div class="quote-block">
+      <div class="quote-text">"Intelligence cannot be derived from data alone, because it originates in stillness."</div>
+      <div class="quote-source">TIME Magazine, January 2026</div>
+    </div>
+
+    <p class="prose">
+      McKinsey, TIME, The Globe and Mail, and academic researchers converge on the same insight:
+      <em>meditation is the skill for the AI age.</em> Not as productivity optimization. As the practice of
+      learning to be present when machines handle the doing. "Meditation builds an internal operating system
+      that helps people think more clearly, act more intentionally, and stay grounded."
+    </p>
+
+    <ul class="research-list">
+      <li><strong>Harvard Business Review:</strong> AI accelerates tasks, which raises the bar for "good," which creates more work, which makes you more reliant on AI. Workload creep, cognitive fatigue, burnout. <span class="src">&mdash; UC Berkeley, 200 employees, 8 months</span></li>
+      <li><strong>Faros AI (10,000+ devs):</strong> AI teams merge 98% more PRs but review time increases 91%. AI code has 1.7x more issues. Positive sentiment toward AI dropped from 70%+ to 60%. <span class="src">&mdash; 1,255 teams tracked</span></li>
+      <li><strong>Cognitive debt:</strong> AI creates a 5-7x velocity-comprehension gap. Code is now cheaper to generate than to understand. Hundreds of AI completions per week = significant cognitive debt by month 3. <span class="src">&mdash; byteiota research</span></li>
+      <li><strong>Giulio Toscani (150 AI experts, 50 countries):</strong> People should learn to meditate and hone critical thinking as AI integrates into daily life. Six 10-day Vipassana retreats himself. <span class="src">&mdash; Taylor &amp; Francis</span></li>
+    </ul>
+  </div>
+
+  <!-- The Solution -->
+  <div class="section">
+    <div class="section-title">The Solution</div>
+
+    <div class="breath-demo">
+      <div class="breath-circle"></div>
+      <div class="breath-label">inhale</div>
+      <div class="breath-sublabel">BREAITH is running. Claude is building.</div>
+    </div>
+
+    <p class="prose">
+      <strong>BREAITH</strong> is a CLI meditation companion that hooks into Claude Code.
+      When Claude starts building, BREAITH activates: guided breathing with 3D wireframe geometry.
+      When Claude finishes or needs your input, a gong sounds.
+      Your meditation is exactly as long as Claude's thinking.
+      No timers. No apps. No scheduling. <em>The AI creates the space. You fill it with presence.</em>
+    </p>
+  </div>
+
+  <!-- How It Works -->
+  <div class="section">
+    <div class="section-title">How It Works</div>
+    <div class="flow">
+      <div class="step">You give Claude a task</div>
+      <div class="arrow">|</div>
+      <div class="step active">Claude starts building (hook triggers)</div>
+      <div class="arrow">|</div>
+      <div class="step active">BREAITH activates. 3D geometry breathes with you.</div>
+      <div class="arrow">|</div>
+      <div class="step">Claude finishes or needs input</div>
+      <div class="arrow">|</div>
+      <div class="step active">Gong. Back to code. Refreshed.</div>
+    </div>
+  </div>
+
+  <!-- Techniques -->
   <div class="section">
     <div class="section-title">Techniques</div>
     <div class="techniques">
-      <div class="technique">
-        <div>
-          <div class="name">Focus</div>
-          <div class="desc">Pre-code clarity</div>
-        </div>
-        <div class="pattern">4 - 4 - 6 - 2</div>
-      </div>
       <div class="technique">
         <div>
           <div class="name">Box</div>
@@ -361,30 +645,16 @@
       <div class="technique">
         <div>
           <div class="name">4-7-8</div>
-          <div class="desc">Dr. Weil relaxation response</div>
+          <div class="desc">Dr. Weil deep relaxation</div>
         </div>
         <div class="pattern">4 - 7 - 8</div>
       </div>
       <div class="technique">
         <div>
-          <div class="name">Coherent</div>
-          <div class="desc">HRV optimal 5.5 bpm</div>
+          <div class="name">Focus</div>
+          <div class="desc">Clarity breath for code review</div>
         </div>
-        <div class="pattern">5.5 - 5.5</div>
-      </div>
-      <div class="technique">
-        <div>
-          <div class="name">Wim Hof</div>
-          <div class="desc">Power breathing</div>
-        </div>
-        <div class="pattern">30x fast + 60s hold</div>
-      </div>
-      <div class="technique">
-        <div>
-          <div class="name">Calm</div>
-          <div class="desc">Extended exhale</div>
-        </div>
-        <div class="pattern">4 - 8</div>
+        <div class="pattern">4 - 4 - 6 - 2</div>
       </div>
       <div class="technique">
         <div>
@@ -396,51 +666,77 @@
     </div>
   </div>
 
-  <div class="section">
-    <div class="section-title">How It Works</div>
-    <div class="flow">
-      <div class="step active">Claude starts building</div>
-      <div class="arrow">↓</div>
-      <div class="step">Hook launches breathe in new terminal</div>
-      <div class="arrow">↓</div>
-      <div class="step active">You meditate. 3D geometry breathes with you.</div>
-      <div class="arrow">↓</div>
-      <div class="step">Claude finishes or needs input</div>
-      <div class="arrow">↓</div>
-      <div class="step active">Gong. Session complete. Back to code.</div>
-    </div>
-  </div>
-
+  <!-- Features -->
   <div class="section">
     <div class="section-title">Features</div>
-    <div class="features">
-      <div class="feature">
-        <div class="icon">◆</div>
+    <div class="card-grid">
+      <div class="card">
+        <div class="title">Auto-Detection</div>
+        <div class="desc">Claude Code hooks trigger BREAITH automatically. No manual launch. Start coding, start breathing.</div>
+      </div>
+      <div class="card">
         <div class="title">3D Wireframes</div>
-        <div class="desc">Cube, octahedron, tetrahedron. Rotating, breathing, depth-shaded.</div>
+        <div class="desc">Cube, octahedron, tetrahedron. Rotating, breathing, depth-shaded. Each technique maps to a geometry.</div>
       </div>
-      <div class="feature">
-        <div class="icon">●</div>
-        <div class="title">Claude Detection</div>
-        <div class="desc">Knows when Claude is building, idle, or needs you.</div>
+      <div class="card">
+        <div class="title">Journal</div>
+        <div class="desc">Post-session thought capture. Gong sounds, write what came up, or skip. Saves to markdown.</div>
       </div>
-      <div class="feature">
-        <div class="icon">♪</div>
-        <div class="title">Gong</div>
-        <div class="desc">Triple glass chime on session end. Tick on breath transitions.</div>
-      </div>
-      <div class="feature">
-        <div class="icon">◇</div>
-        <div class="title">Zero Deps</div>
-        <div class="desc">Pure Python. curses. Nothing to install.</div>
+      <div class="card">
+        <div class="title">Zero Dependencies</div>
+        <div class="desc">Pure Python. curses. One file. No npm install. No node_modules. Just python3 breathe.py.</div>
       </div>
     </div>
   </div>
 
+  <!-- Install -->
+  <div class="section" id="install">
+    <div class="section-title">Install</div>
+    <div class="install-block">
+      <div class="label">one-liner</div>
+      <code>curl -fsSL https://raw.githubusercontent.com/exhuman777/breathe/main/breathe.py -o ~/.local/bin/breathe && chmod +x ~/.local/bin/breathe</code>
+    </div>
+    <div class="install-block">
+      <div class="label">clone</div>
+      <code>git clone https://github.com/exhuman777/breathe.git && cd breathe && python3 breathe.py</code>
+    </div>
+    <div class="install-block">
+      <div class="label">claude code hooks (auto-start on builds)</div>
+      <code>python3 breathe.py --install-hooks --confirm</code>
+    </div>
+  </div>
+
+  <!-- Why -->
+  <div class="section">
+    <div class="section-title">Why BREAITH Exists</div>
+
+    <p class="prose">
+      The psychology of <strong>"doing mode" vs. "being mode"</strong> is directly relevant.
+      Doing mode: constant activity, goal-oriented, planning, evaluating current vs. desired state.
+      Being mode: present-moment awareness without judgment.
+      <em>Modern AI tools hyper-optimize for doing mode.</em> Most developers spend zero time in being mode.
+      BREAITH is the bridge.
+    </p>
+
+    <p class="prose">
+      This is not a productivity hack. Not "meditate to code better." The code will be fine. Claude handles that.
+      <strong>This is about what happens to you while the machine works.</strong>
+      Do you fragment your attention across 12 tabs? Or do you breathe?
+      The AI age demands a new skill: the ability to be still when everything around you accelerates.
+    </p>
+
+    <div class="quote-block">
+      <div class="quote-text">"The real question isn't what's left to do. It's what matters most to do now."</div>
+      <div class="quote-source">The answer might be: nothing. Just breathe.</div>
+    </div>
+  </div>
+
+  <!-- Footer -->
   <div class="footer">
     <div class="links">
       <a href="https://github.com/exhuman777/breathe">GitHub</a>
-      <a href="https://github.com/exhuman777">exhuman</a>
+      <a href="https://x.com/3xhuman">X / @3xhuman</a>
+      <a href="https://o.zo.space/exhuman">Zo</a>
     </div>
     <div class="credit">breathe between the builds</div>
   </div>
@@ -448,7 +744,6 @@
 </div>
 
 <script>
-// Floating particles — Invisible Architecture aesthetic
 const canvas = document.getElementById('particles');
 const ctx = canvas.getContext('2d');
 
@@ -460,17 +755,17 @@ resize();
 window.addEventListener('resize', resize);
 
 const particles = [];
-const NUM = 40;
+const NUM = 50;
 
 for (let i = 0; i < NUM; i++) {
   particles.push({
     x: Math.random() * canvas.width,
     y: Math.random() * canvas.height,
-    vx: (Math.random() - 0.5) * 0.3,
-    vy: -Math.random() * 0.2 - 0.05,
-    size: Math.random() * 2 + 0.5,
+    vx: (Math.random() - 0.5) * 0.2,
+    vy: -Math.random() * 0.15 - 0.03,
+    size: Math.random() * 1.8 + 0.3,
     life: Math.random(),
-    decay: 0.0005 + Math.random() * 0.001,
+    decay: 0.0003 + Math.random() * 0.0008,
   });
 }
 
@@ -482,13 +777,13 @@ function animate() {
     p.y += p.vy;
     p.life -= p.decay;
 
-    if (p.life <= 0 || p.y < 0) {
+    if (p.life <= 0 || p.y < -10) {
       p.x = Math.random() * canvas.width;
       p.y = canvas.height + 10;
       p.life = 1;
     }
 
-    const alpha = p.life * 0.4;
+    const alpha = p.life * 0.35;
     ctx.fillStyle = `rgba(230, 153, 58, ${alpha})`;
     ctx.beginPath();
     ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
@@ -499,6 +794,17 @@ function animate() {
 }
 
 animate();
+
+// Animate breath label
+const labels = ['inhale', 'hold', 'exhale', 'hold'];
+let labelIdx = 0;
+const breathLabel = document.querySelector('.breath-label');
+if (breathLabel) {
+  setInterval(function() {
+    labelIdx = (labelIdx + 1) % labels.length;
+    breathLabel.textContent = labels[labelIdx];
+  }, 4000);
+}
 </script>
 
 </body>
