@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
 """
   B R E A T H E
-  meditation for vibe coders
+  meditation + journal for vibe coders
 
-  Two states:
-    ACTIVE  → Claude is working. Your chosen mode plays (meditation or breathing).
-    IDLE    → You're coding/prompting. Cozy ambient animation waits with you.
+  Single instance. Launch once, stays open.
 
-  On first launch: pick your mode (meditation timer or breathing technique).
-  That mode replays every time Claude starts working.
+  States:
+    SETUP   -> pick mode (breathing or meditation) + technique
+    IDLE    -> ambient starfield. waiting for Claude.
+    ACTIVE  -> Claude is building. your mode plays.
+    JOURNAL -> gong. write your thoughts or skip.
 
-  python3 breathe.py              # interactive setup
-  python3 breathe.py --hook       # launched by Claude Code hook
-  python3 breathe.py --install-hooks --confirm
+  python3 breathe.py                          # launch (once, stays open)
+  python3 breathe.py --install-hooks --confirm # install Claude Code hooks
 """
 
 import curses
@@ -48,9 +48,11 @@ TET_E  = [(0,1),(0,2),(0,3),(1,2),(1,3),(2,3)]
 SHAPES = {"box":(CUBE_V,CUBE_E),"relax":(OCT_V,OCT_E),"focus":(CUBE_V,CUBE_E),"energy":(TET_V,TET_E)}
 
 HOOK_START_FILE = "/tmp/breathe-start-signal"
-HOOK_END_FILE = "/tmp/breathe-end-signal"
+HOOK_END_FILE   = "/tmp/breathe-end-signal"
 CLAUDE_CHECK_SEC = 3.0
 NUM_PARTICLES = 30
+CONFIG_PATH  = os.path.expanduser("~/projects/breathe/.breathe-config.json")
+JOURNAL_PATH = os.path.expanduser("~/projects/breathe/journal.md")
 
 # ─── Helpers ──────────────────────────────────────────────────────────
 class Particle:
@@ -66,12 +68,14 @@ class Particle:
         s.life = random.random() if init else 1.0
         s.char = random.choice(['·','∘','·','·','˙'])
 
-def play_gong():
+def play_deep_gong():
+    """Single deep meditation gong. Glass.aiff at 0.6x speed."""
     try:
-        for snd in ["/System/Library/Sounds/Glass.aiff"]:
-            if os.path.exists(snd):
-                subprocess.Popen(['afplay', snd],
-                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL); return
+        snd = "/System/Library/Sounds/Glass.aiff"
+        if os.path.exists(snd):
+            subprocess.Popen(['afplay', '-r', '0.6', snd],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return
         print('\a', end='', flush=True)
     except: print('\a', end='', flush=True)
 
@@ -80,15 +84,7 @@ def play_tick():
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except: pass
 
-def play_alert():
-    try:
-        if os.path.exists("/System/Library/Sounds/Funk.aiff"):
-            subprocess.Popen(['afplay','/System/Library/Sounds/Funk.aiff'],
-                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    except: pass
-
 def check_start_signal():
-    """Hook-driven: did Claude start a tool use?"""
     if os.path.exists(HOOK_START_FILE):
         try: os.remove(HOOK_START_FILE)
         except: pass
@@ -96,7 +92,6 @@ def check_start_signal():
     return False
 
 def check_end_signal():
-    """Hook-driven: did Claude stop or need input?"""
     if os.path.exists(HOOK_END_FILE):
         try: os.remove(HOOK_END_FILE)
         except: pass
@@ -104,8 +99,6 @@ def check_end_signal():
     return False
 
 def claude_cpu_check():
-    """CPU-based detection for thinking phase (before tools fire).
-    Returns: 'thinking' if high CPU, 'exists' if process exists, 'absent'."""
     try:
         r = subprocess.run(['pgrep','-f','claude'], capture_output=True, text=True, timeout=2)
         if r.returncode != 0: return "absent"
@@ -165,14 +158,34 @@ def sa(scr,y,x,t,a=0):
 def ctr(scr,y,t,a=0):
     _,w=scr.getmaxyx(); sa(scr,y,max(0,(w-len(t))//2),t,a)
 
-# ─── Setup Screen ─────────────────────────────────────────────────────
+def load_config():
+    try:
+        with open(CONFIG_PATH) as f: return json.load(f)
+    except: return None
+
+def save_config(mode, technique):
+    try:
+        with open(CONFIG_PATH, 'w') as f:
+            json.dump({"mode": mode, "technique": technique}, f)
+    except: pass
+
+def save_journal_entry(text, duration, breaths):
+    try:
+        with open(JOURNAL_PATH, 'a') as f:
+            ts = time.strftime("%Y-%m-%d %H:%M")
+            f.write(f"\n---\n**{ts}**  ·  {fmt(duration)}  ·  {breaths} breaths\n\n{text}\n")
+    except: pass
+
+# ─── Setup Screen (Main Menu) ────────────────────────────────────────
 def setup_screen(stdscr, C):
-    """First-time setup: pick mode + technique. Returns (mode, technique_key)."""
+    """Pick mode + technique. Returns (mode, tech_key) or (None, None) to quit."""
     curses.curs_set(0)
-    sel_mode = 0   # 0 = breathing, 1 = meditation (timer only)
+    stdscr.nodelay(False)
+    stdscr.timeout(-1)
+    sel_mode = 0
     sel_tech = 0
     tech_keys = list(TECHNIQUES.keys())
-    step = 0  # 0 = pick mode, 1 = pick technique (if breathing)
+    step = 0
 
     while True:
         h,w = stdscr.getmaxyx()
@@ -182,8 +195,7 @@ def setup_screen(stdscr, C):
         ctr(stdscr, 2, "setup", C[2])
 
         if step == 0:
-            ctr(stdscr, 5, "When Claude is building, what do you want?", C[5])
-
+            ctr(stdscr, 5, "when claude is building, what do you want?", C[5])
             opts = [
                 ("B R E A T H I N G", "guided breathing technique with 3D visuals"),
                 ("M E D I T A T I O N", "silent timer. just the geometry and you."),
@@ -196,12 +208,10 @@ def setup_screen(stdscr, C):
                 else:
                     ctr(stdscr, y, f"   {name}", C[2])
                     ctr(stdscr, y+1, desc, C[4])
-
             ctr(stdscr, h-2, "↑↓  select    ⏎  confirm    q  quit", C[1] | curses.A_BOLD)
 
         elif step == 1:
-            ctr(stdscr, 5, "Pick your technique (press t to change later)", C[5])
-
+            ctr(stdscr, 5, "pick your technique (press t to change later)", C[5])
             for i, k in enumerate(tech_keys):
                 t = TECHNIQUES[k]
                 y = 8 + i * 2
@@ -209,13 +219,12 @@ def setup_screen(stdscr, C):
                     ctr(stdscr, y, f"▸  {t['name']}   {t['short']}   {t['desc']}", C[5] | curses.A_BOLD)
                 else:
                     ctr(stdscr, y, f"   {t['name']}   {t['short']}   {t['desc']}", C[2])
-
-            ctr(stdscr, h-2, "↑↓  select    ⏎  confirm    ←  back", C[1] | curses.A_BOLD)
+            ctr(stdscr, h-2, "↑↓  select    ⏎  confirm    ←  back    q  quit", C[1] | curses.A_BOLD)
 
         stdscr.refresh()
         key = stdscr.getch()
 
-        if key == ord('q') or key == 27:
+        if key == ord('q'):
             return None, None
         elif key == curses.KEY_UP or key == ord('k'):
             if step == 0: sel_mode = (sel_mode - 1) % 2
@@ -226,22 +235,86 @@ def setup_screen(stdscr, C):
         elif key == ord('\n') or key == ord(' '):
             if step == 0:
                 if sel_mode == 0:
-                    step = 1  # pick technique
+                    step = 1
                 else:
-                    return "meditation", "focus"  # meditation uses focus shape
+                    return "meditation", "focus"
             else:
                 return "breathing", tech_keys[sel_tech]
         elif key == curses.KEY_LEFT or key == ord('h'):
             if step == 1: step = 0
 
 
+# ─── Journal Screen ──────────────────────────────────────────────────
+def journal_screen(stdscr, C, duration, breaths):
+    """Post-meditation thought capture. Enter saves, Esc skips."""
+    curses.curs_set(1)
+    stdscr.nodelay(False)
+    stdscr.timeout(-1)
+    text = []
+
+    while True:
+        h, w = stdscr.getmaxyx()
+        stdscr.erase()
+
+        ctr(stdscr, 1, "B R E A T H E", C[5] | curses.A_BOLD)
+        ctr(stdscr, 3, f"◇ {fmt(duration)}  ·  {breaths} breaths", C[1])
+        ctr(stdscr, 5, "any thoughts from the silence?", C[5])
+
+        # Text input box
+        max_w = min(60, w - 6)
+        start_x = max(2, (w - max_w) // 2)
+        input_y = 8
+
+        sa(stdscr, input_y - 1, start_x - 1, "┌" + "─" * max_w + "┐", C[2])
+        for row in range(3):
+            sa(stdscr, input_y + row, start_x - 1, "│", C[2])
+            sa(stdscr, input_y + row, start_x, " " * max_w, C[2])
+            sa(stdscr, input_y + row, start_x + max_w, "│", C[2])
+        sa(stdscr, input_y + 3, start_x - 1, "└" + "─" * max_w + "┘", C[2])
+
+        # Render text with wrapping
+        txt = "".join(text)
+        lines = []
+        for i in range(0, max(1, len(txt) + 1), max(1, max_w)):
+            lines.append(txt[i:i+max_w])
+        if not lines:
+            lines = [""]
+
+        for i, line in enumerate(lines[:3]):
+            sa(stdscr, input_y + i, start_x, line, C[5])
+
+        # Position cursor
+        cur_line = min(len(lines) - 1, 2)
+        cur_col = len(lines[cur_line]) if cur_line < len(lines) else 0
+        try:
+            stdscr.move(input_y + cur_line, start_x + cur_col)
+        except: pass
+
+        ctr(stdscr, h - 3, "⏎  save    esc  skip", C[1] | curses.A_BOLD)
+
+        stdscr.refresh()
+        ch = stdscr.getch()
+
+        if ch == 27:  # Esc = skip
+            curses.curs_set(0)
+            return ""
+        elif ch in (10, curses.KEY_ENTER):  # Enter = save
+            curses.curs_set(0)
+            return "".join(text).strip()
+        elif ch in (127, 8, curses.KEY_BACKSPACE):
+            if text: text.pop()
+        elif 32 <= ch <= 126:
+            if len(text) < max_w * 3:
+                text.append(chr(ch))
+
+    curses.curs_set(0)
+    return ""
+
+
 # ─── Main Loop ────────────────────────────────────────────────────────
 def main(stdscr):
     global args
     curses.curs_set(0)
-    stdscr.nodelay(False)
-    stdscr.timeout(-1)
-
     curses.start_color(); curses.use_default_colors()
     if curses.can_change_color():
         curses.init_color(10,900,600,200); curses.init_color(11,600,400,150)
@@ -255,14 +328,18 @@ def main(stdscr):
             curses.init_pair(i,c,-1)
     C = {i: curses.color_pair(i) for i in range(1,8)}
 
-    # Setup
-    if args.hook:
-        user_mode, tech_key = "breathing", args.technique or "focus"
-    elif args.technique:
+    # ── Resolve mode: CLI flag > saved config > setup screen ──
+    config = load_config()
+    if args.technique:
         user_mode, tech_key = "breathing", args.technique
+        save_config(user_mode, tech_key)
+    elif config and config.get("mode") and config.get("technique"):
+        user_mode = config["mode"]
+        tech_key = config["technique"]
     else:
         user_mode, tech_key = setup_screen(stdscr, C)
         if user_mode is None: return
+        save_config(user_mode, tech_key)
 
     engine = BreathEngine(tech_key)
     verts, edges = SHAPES[tech_key]
@@ -277,15 +354,15 @@ def main(stdscr):
     breaths = 0; last_ph = ""; last_phn = None
     snd = not args.silent
     parts = [Particle(w,h) for _ in range(NUM_PARTICLES)]
-    was_working = False; alert_done = False
+    was_working = False
     med_total = 0.0; med_start = None
-    state = "idle"  # "idle" or "active"
+    state = "idle"
     idle_t = 0
     orb_phase = 0.0
-    last_activity = 0  # timestamp of last detected activity
+    last_activity = 0
     last_cpu_check = 0
 
-    # Clean stale signals on launch
+    # Clean stale signals
     for f in [HOOK_START_FILE, HOOK_END_FILE]:
         try: os.remove(f)
         except: pass
@@ -294,160 +371,190 @@ def main(stdscr):
         try: key = stdscr.getch()
         except: key = -1
 
-        if key == ord('q') or key == 27: break
-        elif key == ord('t'):
-            tech_idx = (tech_idx+1)%len(tech_keys)
-            engine = BreathEngine(tech_keys[tech_idx])
-            verts, edges = SHAPES[tech_keys[tech_idx]]
-        elif key == ord('s'): snd = not snd
-
         now = time.time()
 
-        # === ACTIVATION: hooks + CPU (whichever fires first) ===
+        # ── Quit ──
+        if key == ord('q'): break
 
-        # 1. Hook signal: Claude used a tool
+        # ── Arrow back / Esc → main menu (from idle or active) ──
+        go_setup = False
+        if key in (curses.KEY_LEFT, ord('h')) and state in ("idle", "active"):
+            go_setup = True
+        if key == 27 and state == "active":
+            go_setup = True
+
+        if go_setup:
+            if state == "active" and med_start:
+                med_total += now - med_start
+                med_start = None
+            user_mode, tech_key = setup_screen(stdscr, C)
+            if user_mode is None: break
+            save_config(user_mode, tech_key)
+            engine = BreathEngine(tech_key)
+            verts, edges = SHAPES[tech_key]
+            tech_idx = tech_keys.index(tech_key)
+            state = "idle"
+            was_working = False
+            idle_t = 0
+            stdscr.nodelay(True); stdscr.timeout(50)
+            for f in [HOOK_START_FILE, HOOK_END_FILE]:
+                try: os.remove(f)
+                except: pass
+            continue
+
+        # ── Technique / sound toggle ──
+        if key == ord('t') and state in ("idle", "active"):
+            tech_idx = (tech_idx+1) % len(tech_keys)
+            tech_key = tech_keys[tech_idx]
+            engine = BreathEngine(tech_key)
+            verts, edges = SHAPES[tech_key]
+            save_config(user_mode, tech_key)
+        if key == ord('s'):
+            snd = not snd
+
+        # ══════ ACTIVATION: hooks + CPU ══════
+
         if check_start_signal():
             last_activity = now
             if state != "active":
                 state = "active"; med_start = now; t0 = now
-                breaths = 0; alert_done = False
+                breaths = 0; last_ph = ""; last_phn = None
                 was_working = True
 
-        # 2. CPU check: Claude is thinking (before any tool fires)
         if state == "idle" and now - last_cpu_check > CLAUDE_CHECK_SEC:
             last_cpu_check = now
             cpu = claude_cpu_check()
             if cpu == "thinking":
                 last_activity = now
                 state = "active"; med_start = now; t0 = now
-                breaths = 0; alert_done = False
+                breaths = 0; last_ph = ""; last_phn = None
                 was_working = True
 
-        # === DEACTIVATION: end signal or timeout ===
+        # ══════ DEACTIVATION: end signal or timeout → GONG + JOURNAL ══════
 
-        # 3. Hook signal: Claude stopped or needs input
-        if check_end_signal():
-            if state == "active":
-                med_total += now - (med_start or now)
-            state = "idle"
-            if not alert_done:
-                alert_done = True
-                if snd: play_alert()
+        end_session = False
 
-        # 4. Fallback: active but no activity for 20s, check if Claude is still busy
+        if check_end_signal() and state == "active":
+            end_session = True
+
         if state == "active" and (now - last_activity) > 20:
             cpu = claude_cpu_check()
             if cpu != "thinking":
-                med_total += now - (med_start or now)
-                state = "idle"
-                if not alert_done:
-                    alert_done = True
-                    if snd: play_alert()
+                end_session = True
             else:
-                last_activity = now  # still thinking, reset timer
+                last_activity = now
+
+        if end_session:
+            session_dur = now - (med_start or now)
+            med_total += session_dur
+            med_start = None
+            session_breaths = breaths
+
+            # Deep gong
+            if snd: play_deep_gong()
+
+            # Journal
+            text = journal_screen(stdscr, C, session_dur, session_breaths)
+            if text:
+                save_journal_entry(text, session_dur, session_breaths)
+
+            state = "idle"
+            idle_t = 0
+            stdscr.nodelay(True); stdscr.timeout(50)
+            continue
+
+        # ══════ RENDER ══════
 
         h,w = stdscr.getmaxyx()
-        if h<10 or w<40:
+        if h < 10 or w < 40:
             stdscr.erase(); sa(stdscr,0,0,"need 40x10",C[7]); stdscr.refresh()
             time.sleep(0.1); continue
 
         for p in parts: p.w,p.h=w,h; p.update()
         stdscr.erase()
 
-        # Particles
+        # Particles (always)
         for p in parts:
-            px,py=int(p.x),int(p.y)
+            px,py = int(p.x), int(p.y)
             if 0<=py<h-1 and 0<=px<w-1:
                 pc = C[4] if p.life<0.3 else (C[3] if p.life<0.6 else C[2])
                 sa(stdscr,py,px,p.char,pc)
 
         ctr(stdscr, 0, "B R E A T H E", C[5]|curses.A_BOLD)
 
-        # ══════════════════════════════════════════════════════════
-        # ACTIVE: Claude is working → breathing or meditation
-        # ══════════════════════════════════════════════════════════
+        # ══════ ACTIVE STATE ══════
         if state == "active":
             elapsed = now - t0
-
-            # Always show 3D shape
             ax += 0.008; ay += 0.012
             ccx, ccy = w//2, h//2 - 3
 
             if user_mode == "breathing":
                 pn, prog, pd = engine.get(elapsed)
-                if pn=="inhale" and last_ph!="inhale": breaths+=1
+                if pn == "inhale" and last_ph != "inhale": breaths += 1
                 last_ph = pn
-                if snd and pn!=last_phn and last_phn is not None: play_tick()
+                if snd and pn != last_phn and last_phn is not None: play_tick()
                 last_phn = pn
-
-                if pn=="inhale": sc=3.0+prog*2.5
-                elif pn=="hold": sc=5.5+math.sin(now*2)*0.2
-                elif pn=="exhale": sc=5.5-prog*2.5
-                else: sc=3.0
+                if pn == "inhale": sc = 3.0 + prog * 2.5
+                elif pn == "hold": sc = 5.5 + math.sin(now*2) * 0.2
+                elif pn == "exhale": sc = 5.5 - prog * 2.5
+                else: sc = 3.0
             else:
-                # Meditation: slow breathing geometry, no labels
-                cycle = 10.0  # gentle 10s expand/contract
+                # Meditation: gentle expand/contract
+                cycle = 10.0
                 prog = (math.sin(now * math.pi / (cycle/2)) + 1) / 2
                 sc = 3.0 + prog * 2.5
                 pn = None
 
+            # 3D shape
             pr = []
             for vx,vy,vz in verts:
                 rx,ry,rz = rot(vx,vy,vz,ax,ay)
                 sx,sy,f = proj(rx,ry,rz,ccx,ccy,sc)
                 pr.append((sx,sy,f))
             for e0,e1 in edges:
-                x0,y0,f0=pr[e0]; x1,y1,f1=pr[e1]
-                af=(f0+f1)/2
+                x0,y0,f0 = pr[e0]; x1,y1,f1 = pr[e1]
+                af = (f0+f1)/2
                 for px,py in bres(x0,y0,x1,y1):
                     if 0<=py<h-1 and 0<=px<w-1:
-                        if af>0.85: ch,cp='█',C[1]
-                        elif af>0.7: ch,cp='▓',C[1]
-                        elif af>0.55: ch,cp='░',C[2]
-                        else: ch,cp='·',C[3]
+                        if af>0.85: ch,cp = '█',C[1]
+                        elif af>0.7: ch,cp = '▓',C[1]
+                        elif af>0.55: ch,cp = '░',C[2]
+                        else: ch,cp = '·',C[3]
                         sa(stdscr,py,px,ch,cp)
             for sx,sy,f in pr:
                 if 0<=sy<h-1 and 0<=sx<w-1:
                     sa(stdscr,sy,sx,'◆',C[5]|curses.A_BOLD)
 
-            # Mode-specific UI
+            # Mode UI
             gy = h//2 + 4
             if user_mode == "breathing":
                 tech = TECHNIQUES[tech_keys[tech_idx]]
                 ctr(stdscr, 1, tech["name"], C[2])
-
-                labels = {"inhale":"▲  I N H A L E  ▲","hold":"◆  H O L D  ◆",
-                          "exhale":"▼  E X H A L E  ▼","rest":"·  R E S T  ·"}
+                labels = {"inhale":"▲  I N H A L E  ▲", "hold":"◆  H O L D  ◆",
+                          "exhale":"▼  E X H A L E  ▼", "rest":"·  R E S T  ·"}
                 ctr(stdscr, gy, labels.get(pn,""), C[5]|curses.A_BOLD)
-
                 bw = min(32, w-8)
                 fl = int(prog * bw)
                 bar = '━'*fl + '╸' + '─'*max(0,bw-fl-1)
                 ctr(stdscr, gy+1, bar, C[1])
-
                 if engine.rnds:
                     ctr(stdscr, gy+2, f"round {engine.rnd}/{engine.rnds}", C[2])
-
                 ctr(stdscr, gy+3, f"◇ {fmt(elapsed)}  ·  {breaths} cycles", C[1])
             else:
                 ctr(stdscr, 1, "M E D I T A T I O N", C[2])
                 ctr(stdscr, gy+1, f"◇ {fmt(elapsed)}", C[1])
 
             ctr(stdscr, h-4, "● C L A U D E   I S   B U I L D I N G ●", C[6]|curses.A_BOLD)
+            ctr(stdscr, h-2, f"[t] {TECHNIQUES[tech_key]['short']}  [s] {'♪' if snd else '×'}  [←] menu  [q] quit", C[1]|curses.A_BOLD)
 
-        # ══════════════════════════════════════════════════════════
-        # IDLE: You're coding. Cozy ambient.
-        # ══════════════════════════════════════════════════════════
-        else:
+        # ══════ IDLE STATE ══════
+        elif state == "idle":
             idle_t += 1
             orb_phase += 0.02
-            needs_action = was_working and alert_done
 
-            if needs_action:
-                # Gentle nudge — your turn
+            # After 2 min idle, fade from "your turn" to ambient
+            if was_working and idle_t < 2400:
                 ctr(stdscr, 1, "◇  y o u r   t u r n  ◇", C[5])
-
-                # Slow rotating ring of stars
                 ccx, ccy = w//2, h//2 - 1
                 pulse = (math.sin(now * 1.2) + 1) / 2
                 for ring in range(3):
@@ -462,22 +569,18 @@ def main(stdscr):
                             if depth > 0.7: sa(stdscr, py, px, '◇', C[5])
                             elif depth > 0.4: sa(stdscr, py, px, '·', C[1])
                             else: sa(stdscr, py, px, '˙', C[2])
-
                 sa(stdscr, ccy, ccx, '◆', C[5])
-
                 ctr(stdscr, h//2+3, "claude is waiting for you", C[1])
                 ctr(stdscr, h//2+4, "switch back when ready", C[3])
-
                 if med_total > 0:
-                    ctr(stdscr, h//2+6, f"breathed {fmt(med_total)}  ·  {breaths} cycles", C[1])
+                    ctr(stdscr, h//2+6, f"breathed {fmt(med_total)}  ·  total", C[1])
             else:
-                # Cozy idle: deep starfield + orbiting constellations
+                if was_working: was_working = False  # fade complete
                 ctr(stdscr, 1, "·  w a i t i n g  ·", C[3])
-
                 ccx, ccy = w//2, h//2 - 1
 
-                # Layer 1: Deep background stars (fixed, twinkling)
-                random.seed(42)  # stable positions
+                # Deep background stars
+                random.seed(42)
                 for i in range(25):
                     sx = random.randint(1, w-2)
                     sy = random.randint(2, h-4)
@@ -485,9 +588,9 @@ def main(stdscr):
                     if twinkle > 0.3:
                         ch = '·' if twinkle < 0.7 else '∘'
                         sa(stdscr, sy, sx, ch, C[4] if twinkle < 0.7 else C[3])
-                random.seed()  # restore randomness
+                random.seed()
 
-                # Layer 2: Mid-depth orbiting constellation (slow)
+                # Mid orbiting constellation
                 for i in range(7):
                     ang = orb_phase * 0.4 + (i * 2 * math.pi / 7)
                     r = 6 + math.sin(orb_phase * 0.2 + i) * 2
@@ -499,7 +602,7 @@ def main(stdscr):
                         elif b > 0.3: sa(stdscr, oy, ox, '·', C[2])
                         else: sa(stdscr, oy, ox, '˙', C[3])
 
-                # Layer 3: Close orbiting ring (faster, brighter)
+                # Close orbiting ring
                 for i in range(5):
                     ang = orb_phase * 0.8 + (i * 2 * math.pi / 5) + math.pi/4
                     r = 3 + math.sin(orb_phase * 0.5 + i * 0.8) * 1
@@ -510,12 +613,11 @@ def main(stdscr):
                         if b > 0.5: sa(stdscr, oy, ox, '◆', C[5])
                         else: sa(stdscr, oy, ox, '◇', C[1])
 
-                # Center: slow breathing pulse
+                # Center pulse
                 pulse = (math.sin(orb_phase * 0.3) + 1) / 2
                 sa(stdscr, ccy, ccx, '◆' if pulse > 0.5 else '◇',
                    C[5] if pulse > 0.5 else C[2])
 
-                # Idle messages
                 msgs = [
                     "energy follows attention",
                     "breathe between the builds",
@@ -524,20 +626,18 @@ def main(stdscr):
                 ]
                 ctr(stdscr, h//2 + 4, msgs[(idle_t//160)%len(msgs)], C[3])
 
-                # Status
+                # Claude status
                 if idle_t % 60 == 0:
                     main._ce = claude_cpu_check() != "absent"
                 has_claude = getattr(main, '_ce', False)
                 st = "◌ claude idle" if has_claude else "○ no claude"
                 ctr(stdscr, h-4, st, C[4])
 
-        # Controls — always visible, bold
-        tech = TECHNIQUES[tech_keys[tech_idx]]
-        snd_s = "♪" if snd else "×"
-        mode_s = "breath" if user_mode == "breathing" else "meditate"
-        ctr(stdscr, h-2, f"[t] {tech['short']}  [s] {snd_s}  [q] quit  ·  {mode_s}", C[1]|curses.A_BOLD)
-        sel = "  ".join(f"{'▸' if i==tech_idx else ' '}{k}" for i,k in enumerate(tech_keys))
-        ctr(stdscr, h-1, sel, C[2])
+            # Idle controls
+            mode_s = "breath" if user_mode == "breathing" else "meditate"
+            ctr(stdscr, h-2, f"[t] {TECHNIQUES[tech_key]['short']}  [s] {'♪' if snd else '×'}  [←] menu  [q] quit  ·  {mode_s}", C[1]|curses.A_BOLD)
+            sel = "  ".join(f"{'▸' if i==tech_idx else ' '}{k}" for i,k in enumerate(tech_keys))
+            ctr(stdscr, h-1, sel, C[2])
 
         stdscr.refresh()
         time.sleep(0.05)
@@ -546,17 +646,11 @@ def main(stdscr):
 # ─── Hook Installer ───────────────────────────────────────────────────
 def install_hooks():
     hd = os.path.expanduser("~/.claude/hooks"); os.makedirs(hd, exist_ok=True)
-    sp = os.path.abspath(__file__)
+    # Start hook: just touch signal file. No Terminal launch.
     with open(f"{hd}/breathe-start.sh",'w') as f:
-        f.write(f'#!/bin/bash\n'
-                f'# Always signal that Claude is working\n'
-                f'touch /tmp/breathe-start-signal\n'
-                f'# Launch app if not already running\n'
-                f'LOCK="/tmp/breathe.lock"\nmkdir "$LOCK" 2>/dev/null || exit 0\n'
-                f"osascript <<'AS' &\ntell application \"Terminal\"\n    activate\n"
-                f"    do script \"python3 {sp} --hook; rm -rf /tmp/breathe.lock; exit\"\n"
-                f"end tell\nAS\nexit 0\n")
+        f.write("#!/bin/bash\ntouch /tmp/breathe-start-signal\nexit 0\n")
     os.chmod(f"{hd}/breathe-start.sh", 0o755)
+    # Stop hook: just touch signal file.
     with open(f"{hd}/breathe-stop.sh",'w') as f:
         f.write("#!/bin/bash\ntouch /tmp/breathe-end-signal\nexit 0\n")
     os.chmod(f"{hd}/breathe-stop.sh", 0o755)
@@ -575,19 +669,18 @@ def install_hooks():
     if not has(h["Notification"]):
         h["Notification"].append({"matcher":"permission_prompt","hooks":[{"type":"command","command":f"bash {hd}/breathe-stop.sh"}]})
     s["hooks"] = h
+    with open(sp_path,'w') as f: json.dump(s,f,indent=2)
+    print(f"Hooks written to {sp_path}")
     print(json.dumps({"hooks":h}, indent=2))
-    if "--confirm" in sys.argv or True:  # always apply when called
-        with open(sp_path,'w') as f: json.dump(s,f,indent=2)
-        print(f"\nWritten to {sp_path}")
 
 
 if __name__ == "__main__":
-    p = argparse.ArgumentParser(description="B R E A T H E")
-    p.add_argument("--hook", action="store_true")
-    p.add_argument("--technique", choices=list(TECHNIQUES.keys()))
-    p.add_argument("--silent", action="store_true")
-    p.add_argument("--install-hooks", action="store_true")
-    p.add_argument("--confirm", action="store_true", help="Apply hook settings")
+    p = argparse.ArgumentParser(description="B R E A T H E — meditation + journal")
+    p.add_argument("--technique", choices=list(TECHNIQUES.keys()), help="Start with technique")
+    p.add_argument("--silent", action="store_true", help="No sound")
+    p.add_argument("--install-hooks", action="store_true", help="Install Claude Code hooks")
+    p.add_argument("--confirm", action="store_true")
+    p.add_argument("--hook", action="store_true", help=argparse.SUPPRESS)  # legacy, ignored
     args = p.parse_args()
     if args.install_hooks: install_hooks(); sys.exit(0)
     try: curses.wrapper(main); print("\n  namaste.\n")
