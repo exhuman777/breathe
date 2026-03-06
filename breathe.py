@@ -51,8 +51,9 @@ HOOK_START_FILE = "/tmp/breathe-start-signal"
 HOOK_END_FILE   = "/tmp/breathe-end-signal"
 CLAUDE_CHECK_SEC = 3.0
 NUM_PARTICLES = 30
-CONFIG_PATH  = os.path.expanduser("~/projects/breathe/.breathe-config.json")
-JOURNAL_PATH = os.path.expanduser("~/projects/breathe/journal.md")
+BREAITH_DIR  = os.path.expanduser("~/.breaith")
+CONFIG_PATH  = os.path.join(BREAITH_DIR, "config.json")
+JOURNAL_PATH = os.path.join(BREAITH_DIR, "journal.md")
 
 # ─── Helpers ──────────────────────────────────────────────────────────
 class Particle:
@@ -165,12 +166,14 @@ def load_config():
 
 def save_config(mode, technique):
     try:
+        os.makedirs(BREAITH_DIR, exist_ok=True)
         with open(CONFIG_PATH, 'w') as f:
             json.dump({"mode": mode, "technique": technique}, f)
     except: pass
 
 def save_journal_entry(text, duration, breaths):
     try:
+        os.makedirs(BREAITH_DIR, exist_ok=True)
         with open(JOURNAL_PATH, 'a') as f:
             ts = time.strftime("%Y-%m-%d %H:%M")
             f.write(f"\n---\n**{ts}**  ·  {fmt(duration)}  ·  {breaths} breaths\n\n{text}\n")

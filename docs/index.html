@@ -693,17 +693,20 @@
   <div class="section" id="install">
     <div class="section-title">Install</div>
     <div class="install-block">
-      <div class="label">one-liner</div>
-      <code>curl -fsSL https://raw.githubusercontent.com/exhuman777/breathe/main/breathe.py -o ~/.local/bin/breathe && chmod +x ~/.local/bin/breathe</code>
+      <div class="label">recommended: clone + run</div>
+      <code>git clone https://github.com/exhuman777/breathe.git ~/breaith<br>cd ~/breaith && python3 breathe.py</code>
     </div>
     <div class="install-block">
-      <div class="label">clone</div>
-      <code>git clone https://github.com/exhuman777/breathe.git && cd breathe && python3 breathe.py</code>
+      <div class="label">install claude code hooks (auto-start on builds)</div>
+      <code>cd ~/breaith && python3 breathe.py --install-hooks --confirm</code>
     </div>
     <div class="install-block">
-      <div class="label">claude code hooks (auto-start on builds)</div>
-      <code>python3 breathe.py --install-hooks --confirm</code>
+      <div class="label">or: one-liner (download only)</div>
+      <code>curl -fsSL https://raw.githubusercontent.com/exhuman777/breathe/main/breathe.py -o ~/breaith.py && python3 ~/breaith.py</code>
     </div>
+    <p class="prose" style="margin-top:16px; font-size:11px;">
+      Requires <strong>Python 3.6+</strong> and a terminal with Unicode support. Zero dependencies. macOS recommended (system sounds + Claude Code hooks).
+    </p>
   </div>
 
   <!-- Why -->
