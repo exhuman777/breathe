@@ -1,10 +1,9 @@
 ```
-██████╗ ██████╗ ███████╗ █████╗ ████████╗██╗  ██╗███████╗
-██╔══██╗██╔══██╗██╔════╝██╔══██╗╚══██╔══╝██║  ██║██╔════╝
-██████╔╝██████╔╝█████╗  ███████║   ██║   ███████║█████╗
-██╔══██╗██╔══██╗██╔══╝  ██╔══██║   ██║   ██╔══██║██╔══╝
-██████╔╝██║  ██║███████╗██║  ██║   ██║   ██║  ██║███████╗
-╚═════╝ ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝   ╚═╝   ╚═╝  ╚═╝╚══════╝
+ _                    ___ _   _
+| |__  _ __ ___      / _ (_) | |_  | |__
+| '_ \| '__/ _ \    / /_\/ | | __| | '_ \
+| |_) | | |  __/   / /_\\| | | |_  | | | |
+|_.__/|_|  \___|   \____/|_|  \__| |_| |_|
 ```
 
 <p align="center">
@@ -32,7 +31,7 @@
 
 ## What
 
-A CLI meditation companion for developers using Claude Code.
+**breAIth** — a CLI meditation companion for developers using Claude Code.
 
 **Two modes:**
 
@@ -61,7 +60,7 @@ You give Claude a task
         ↓
 Claude starts building (high CPU)
         ↓
-   BREATHE activates → 3D geometry + guided breathing
+   breAIth activates → 3D geometry + guided breathing
         ↓
 Claude finishes / needs input / permission
         ↓
@@ -85,7 +84,7 @@ Press `t` to cycle techniques during a session. Each maps to a unique 3D wirefra
 
 ## Claude Code Hooks
 
-Auto-launch breathe when Claude works. Auto-end when done.
+Auto-launch breAIth when Claude works. Auto-end when done.
 
 ```bash
 python3 breathe.py --install-hooks --confirm

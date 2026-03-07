@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-  B R E A T H E
+  b r e A I t h
   meditation + journal for vibe coders
 
   Single instance. Launch once, stays open.
@@ -47,10 +47,20 @@ TET_V  = [(1,1,1),(1,-1,-1),(-1,1,-1),(-1,-1,1)]
 TET_E  = [(0,1),(0,2),(0,3),(1,2),(1,3),(2,3)]
 SHAPES = {"box":(CUBE_V,CUBE_E),"relax":(OCT_V,OCT_E),"focus":(CUBE_V,CUBE_E),"energy":(TET_V,TET_E)}
 
+MED_STYLES = ["wireframe", "sacred", "lissajous"]
+
 HOOK_START_FILE = "/tmp/breathe-start-signal"
 HOOK_END_FILE   = "/tmp/breathe-end-signal"
+SESSION_ACTIVE_FILE = "/tmp/breathe-session-active"
 CLAUDE_CHECK_SEC = 3.0
+START_CONFIRM_SEC = 2.0    # wait 2s after first signal, then confirm before activating
+END_CONFIRM_COUNT = 3      # need 3 consecutive "not active" checks to end
+END_CHECK_INTERVAL = 2.0   # seconds between end-confirmation checks
 NUM_PARTICLES = 30
+JSONL_DIR = os.path.expanduser("~/.claude/projects")
+JSONL_SCAN_INTERVAL = 30.0  # rescan for newest JSONL every 30s
+JSONL_THINKING_SEC = 8.0    # modified within 8s = actively working
+JSONL_EXISTS_SEC = 60.0     # modified within 60s = session exists
 BREAITH_DIR  = os.path.expanduser("~/.breaith")
 CONFIG_PATH  = os.path.join(BREAITH_DIR, "config.json")
 JOURNAL_PATH = os.path.join(BREAITH_DIR, "journal.md")
@@ -70,11 +80,15 @@ class Particle:
         s.char = random.choice(['·','∘','·','·','˙'])
 
 def play_deep_gong():
-    """Single deep meditation gong. Glass.aiff at 0.6x speed."""
+    """Layered deep meditation gong. Two Glass.aiff voices at different pitches."""
     try:
         snd = "/System/Library/Sounds/Glass.aiff"
         if os.path.exists(snd):
-            subprocess.Popen(['afplay', '-r', '0.6', snd],
+            # Primary: very deep, slow
+            subprocess.Popen(['afplay', '-r', '0.35', snd],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            # Overtone: slightly higher, delayed 0.15s via lighter rate
+            subprocess.Popen(['afplay', '-r', '0.5', snd],
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             return
         print('\a', end='', flush=True)
@@ -99,19 +113,76 @@ def check_end_signal():
         return True
     return False
 
-def claude_cpu_check():
+_jsonl_cache = {"path": None, "mtime": 0, "scan_time": 0}
+
+def _find_newest_jsonl():
+    """Find the most recently modified .jsonl transcript in Claude projects dir."""
+    newest, newest_mt = None, 0
     try:
-        r = subprocess.run(['pgrep','-f','claude'], capture_output=True, text=True, timeout=2)
-        if r.returncode != 0: return "absent"
-        mx = 0.0
-        for pid in (p for p in r.stdout.strip().split('\n') if p):
+        for proj in os.listdir(JSONL_DIR):
+            proj_path = os.path.join(JSONL_DIR, proj)
+            if not os.path.isdir(proj_path):
+                continue
             try:
-                ps = subprocess.run(['ps','-p',pid,'-o','%cpu='], capture_output=True, text=True, timeout=2)
-                mx = max(mx, float(ps.stdout.strip()))
-            except: pass
-        if mx > 15: return "thinking"
-        return "exists"
-    except: return "absent"
+                for f in os.listdir(proj_path):
+                    if f.endswith('.jsonl') and f != 'history.jsonl':
+                        fp = os.path.join(proj_path, f)
+                        try:
+                            mt = os.stat(fp).st_mtime
+                            if mt > newest_mt:
+                                newest_mt = mt
+                                newest = fp
+                        except OSError:
+                            pass
+            except OSError:
+                pass
+    except OSError:
+        pass
+    return newest, newest_mt
+
+def claude_cpu_check():
+    """Detect Claude Code activity. Returns 'thinking', 'exists', or 'absent'.
+
+    Zero-subprocess detection:
+    1. /tmp/breathe-session-active — from SessionStart/SessionEnd hooks
+    2. JSONL file mtime — Claude writes transcripts during work
+    No pgrep/ps subprocess spawning.
+    """
+    now = time.time()
+    c = _jsonl_cache
+
+    # Layer 1: session lifecycle file (from hooks)
+    session_exists = os.path.exists(SESSION_ACTIVE_FILE)
+
+    # Layer 2: JSONL transcript activity
+    # Periodically rescan for the newest JSONL file
+    if c["path"] is None or (now - c["scan_time"]) > JSONL_SCAN_INTERVAL:
+        c["path"], c["mtime"] = _find_newest_jsonl()
+        c["scan_time"] = now
+
+    jsonl_age = None
+    if c["path"]:
+        try:
+            current_mt = os.stat(c["path"]).st_mtime
+            if current_mt != c["mtime"]:
+                c["mtime"] = current_mt
+                # File changed — rescan in case a newer session started
+                c["path"], c["mtime"] = _find_newest_jsonl()
+                c["scan_time"] = now
+            jsonl_age = now - c["mtime"]
+        except OSError:
+            c["path"] = None  # file gone, rescan next cycle
+
+    # Decision: combine both signals
+    if session_exists and jsonl_age is not None and jsonl_age < JSONL_THINKING_SEC:
+        return "thinking"  # session active + fresh writes = working
+    if jsonl_age is not None and jsonl_age < JSONL_THINKING_SEC:
+        return "thinking"  # fresh writes even without session file
+    if session_exists:
+        return "exists"    # session alive but no recent writes
+    if jsonl_age is not None and jsonl_age < JSONL_EXISTS_SEC:
+        return "exists"    # recent-ish activity
+    return "absent"
 
 def rot(x,y,z,ax,ay):
     ca,sa=math.cos(ax),math.sin(ax); y2,z2=y*ca-z*sa,y*sa+z*ca
@@ -164,11 +235,14 @@ def load_config():
         with open(CONFIG_PATH) as f: return json.load(f)
     except: return None
 
-def save_config(mode, technique):
+def save_config(mode, technique, med_style=None):
     try:
         os.makedirs(BREAITH_DIR, exist_ok=True)
+        d = {"mode": mode, "technique": technique}
+        if med_style is not None:
+            d["med_style"] = med_style
         with open(CONFIG_PATH, 'w') as f:
-            json.dump({"mode": mode, "technique": technique}, f)
+            json.dump(d, f)
     except: pass
 
 def save_journal_entry(text, duration, breaths):
@@ -194,7 +268,7 @@ def setup_screen(stdscr, C):
         h,w = stdscr.getmaxyx()
         stdscr.erase()
 
-        ctr(stdscr, 1, "B R E A T H E", C[5] | curses.A_BOLD)
+        ctr(stdscr, 1, "b r e A I t h", C[5] | curses.A_BOLD)
         ctr(stdscr, 2, "setup", C[2])
 
         if step == 0:
@@ -259,7 +333,7 @@ def journal_screen(stdscr, C, duration, breaths):
         h, w = stdscr.getmaxyx()
         stdscr.erase()
 
-        ctr(stdscr, 1, "B R E A T H E", C[5] | curses.A_BOLD)
+        ctr(stdscr, 1, "b r e A I t h", C[5] | curses.A_BOLD)
         ctr(stdscr, 3, f"◇ {fmt(duration)}  ·  {breaths} breaths", C[1])
         ctr(stdscr, 5, "any thoughts from the silence?", C[5])
 
@@ -344,6 +418,11 @@ def main(stdscr):
         if user_mode is None: return
         save_config(user_mode, tech_key)
 
+    # Meditation style index (persisted)
+    med_style_idx = 0
+    if config and config.get("med_style") in MED_STYLES:
+        med_style_idx = MED_STYLES.index(config["med_style"])
+
     engine = BreathEngine(tech_key)
     verts, edges = SHAPES[tech_key]
     tech_keys = list(TECHNIQUES.keys())
@@ -364,6 +443,10 @@ def main(stdscr):
     orb_phase = 0.0
     last_activity = 0
     last_cpu_check = 0
+    start_signal_time = 0      # when first start evidence appeared
+    start_from_hook = False    # True if activation triggered by hook (trusted)
+    end_idle_count = 0         # consecutive "not thinking" checks
+    last_end_check = 0         # last end-confirmation check timestamp
 
     # Clean stale signals
     for f in [HOOK_START_FILE, HOOK_END_FILE]:
@@ -396,9 +479,11 @@ def main(stdscr):
             engine = BreathEngine(tech_key)
             verts, edges = SHAPES[tech_key]
             tech_idx = tech_keys.index(tech_key)
+            med_style_idx = 0
             state = "idle"
             was_working = False
             idle_t = 0
+            start_signal_time = 0; start_from_hook = False; end_idle_count = 0; last_end_check = 0
             stdscr.nodelay(True); stdscr.timeout(50)
             for f in [HOOK_START_FILE, HOOK_END_FILE]:
                 try: os.remove(f)
@@ -407,55 +492,79 @@ def main(stdscr):
 
         # ── Technique / sound toggle ──
         if key == ord('t') and state in ("idle", "active"):
-            tech_idx = (tech_idx+1) % len(tech_keys)
-            tech_key = tech_keys[tech_idx]
-            engine = BreathEngine(tech_key)
-            verts, edges = SHAPES[tech_key]
-            save_config(user_mode, tech_key)
+            if user_mode == "breathing":
+                tech_idx = (tech_idx+1) % len(tech_keys)
+                tech_key = tech_keys[tech_idx]
+                engine = BreathEngine(tech_key)
+                verts, edges = SHAPES[tech_key]
+                save_config(user_mode, tech_key)
+            else:
+                med_style_idx = (med_style_idx + 1) % len(MED_STYLES)
+                save_config(user_mode, tech_key, MED_STYLES[med_style_idx])
         if key == ord('s'):
             snd = not snd
 
-        # ══════ ACTIVATION: hooks + CPU ══════
+        # ══════ ACTIVATION: hooks + JSONL file monitoring ══════
 
-        if check_start_signal():
+        hook_triggered = check_start_signal()
+        if hook_triggered:
             last_activity = now
-            if state != "active":
-                state = "active"; med_start = now; t0 = now
-                breaths = 0; last_ph = ""; last_phn = None
-                was_working = True
+            if state == "active":
+                end_idle_count = 0
+            elif start_signal_time == 0:
+                start_signal_time = now
+                start_from_hook = True
 
         if state == "idle" and now - last_cpu_check > CLAUDE_CHECK_SEC:
             last_cpu_check = now
             cpu = claude_cpu_check()
             if cpu == "thinking":
                 last_activity = now
+                if start_signal_time == 0:
+                    start_signal_time = now
+                    start_from_hook = False
+
+        # Confirm start after debounce delay
+        if state == "idle" and start_signal_time > 0 and (now - start_signal_time) >= START_CONFIRM_SEC:
+            if start_from_hook or claude_cpu_check() == "thinking":
                 state = "active"; med_start = now; t0 = now
                 breaths = 0; last_ph = ""; last_phn = None
                 was_working = True
+                end_idle_count = 0; last_end_check = 0
+            start_signal_time = 0
 
-        # ══════ DEACTIVATION: end signal or timeout → GONG + JOURNAL ══════
+        # ══════ DEACTIVATION: debounced end → GONG + JOURNAL ══════
 
-        end_session = False
+        # Trigger end-confirmation sequence on end signal or timeout
+        end_hook_received = check_end_signal()
+        if end_hook_received and state == "active":
+            end_idle_count = max(end_idle_count, 1)  # start counting
+            last_end_check = 0  # force immediate check
 
-        if check_end_signal() and state == "active":
-            # Multiple Claudes? Only end when NONE are still thinking.
+        if state == "active" and (now - last_activity) > 12:
+            if end_idle_count == 0:
+                end_idle_count = 1  # start end-confirmation sequence
+                last_end_check = 0  # force immediate first check
+
+        # Debounced end-confirmation: check every END_CHECK_INTERVAL
+        if state == "active" and end_idle_count > 0 and (now - last_end_check) >= END_CHECK_INTERVAL:
+            last_end_check = now
             cpu = claude_cpu_check()
-            if cpu != "thinking":
-                end_session = True
-            # else: another Claude still working, keep meditating
-
-        if state == "active" and (now - last_activity) > 20:
-            cpu = claude_cpu_check()
-            if cpu != "thinking":
-                end_session = True
-            else:
+            if cpu == "thinking":
+                # Still working — reset counter, refresh activity timer
+                end_idle_count = 0
                 last_activity = now
+            else:
+                end_idle_count += 1
+
+        end_session = state == "active" and end_idle_count >= END_CONFIRM_COUNT
 
         if end_session:
             session_dur = now - (med_start or now)
             med_total += session_dur
             med_start = None
             session_breaths = breaths
+            start_signal_time = 0
 
             # Deep gong
             if snd: play_deep_gong()
@@ -467,6 +576,7 @@ def main(stdscr):
 
             state = "idle"
             idle_t = 0
+            end_idle_count = 0; last_end_check = 0
             stdscr.nodelay(True); stdscr.timeout(50)
             continue
 
@@ -487,7 +597,7 @@ def main(stdscr):
                 pc = C[4] if p.life<0.3 else (C[3] if p.life<0.6 else C[2])
                 sa(stdscr,py,px,p.char,pc)
 
-        ctr(stdscr, 0, "B R E A T H E", C[5]|curses.A_BOLD)
+        ctr(stdscr, 0, "b r e A I t h", C[5]|curses.A_BOLD)
 
         # ══════ ACTIVE STATE ══════
         if state == "active":
@@ -512,25 +622,105 @@ def main(stdscr):
                 sc = 3.0 + prog * 2.5
                 pn = None
 
-            # 3D shape
-            pr = []
-            for vx,vy,vz in verts:
-                rx,ry,rz = rot(vx,vy,vz,ax,ay)
-                sx,sy,f = proj(rx,ry,rz,ccx,ccy,sc)
-                pr.append((sx,sy,f))
-            for e0,e1 in edges:
-                x0,y0,f0 = pr[e0]; x1,y1,f1 = pr[e1]
-                af = (f0+f1)/2
-                for px,py in bres(x0,y0,x1,y1):
-                    if 0<=py<h-1 and 0<=px<w-1:
-                        if af>0.85: ch,cp = '█',C[1]
-                        elif af>0.7: ch,cp = '▓',C[1]
-                        elif af>0.55: ch,cp = '░',C[2]
-                        else: ch,cp = '·',C[3]
-                        sa(stdscr,py,px,ch,cp)
-            for sx,sy,f in pr:
-                if 0<=sy<h-1 and 0<=sx<w-1:
-                    sa(stdscr,sy,sx,'◆',C[5]|curses.A_BOLD)
+            # ── Visual dispatch ──
+            draw_wireframe = (user_mode == "breathing") or (med_style_idx == 0)
+
+            if draw_wireframe:
+                # 3D shape
+                pr = []
+                for vx,vy,vz in verts:
+                    rx,ry,rz = rot(vx,vy,vz,ax,ay)
+                    sx,sy,f = proj(rx,ry,rz,ccx,ccy,sc)
+                    pr.append((sx,sy,f))
+                for e0,e1 in edges:
+                    x0,y0,f0 = pr[e0]; x1,y1,f1 = pr[e1]
+                    af = (f0+f1)/2
+                    for px,py in bres(x0,y0,x1,y1):
+                        if 0<=py<h-1 and 0<=px<w-1:
+                            if af>0.85: ch,cp = '█',C[1]
+                            elif af>0.7: ch,cp = '▓',C[1]
+                            elif af>0.55: ch,cp = '░',C[2]
+                            else: ch,cp = '·',C[3]
+                            sa(stdscr,py,px,ch,cp)
+                for sx,sy,f in pr:
+                    if 0<=sy<h-1 and 0<=sx<w-1:
+                        sa(stdscr,sy,sx,'◆',C[5]|curses.A_BOLD)
+
+            elif med_style_idx == 1:
+                # ── Sacred Geometry: flower of life + aurora ──
+                # Flower of life: 7 circles (center + 6 hex positions)
+                fol_r = min(h//4, w//8)
+                rot_ang = now * 0.15
+                centers = [(0, 0)]
+                for i in range(6):
+                    a = math.pi / 3 * i + rot_ang
+                    centers.append((math.cos(a) * fol_r, math.sin(a) * fol_r))
+                for ci, (ox, oy) in enumerate(centers):
+                    n_pts = 24
+                    for j in range(n_pts):
+                        a = 2 * math.pi * j / n_pts + rot_ang
+                        px = int(ccx + (ox + math.cos(a) * fol_r) * 2)
+                        py = int(ccy + oy + math.sin(a) * fol_r)
+                        if 0 <= py < h - 1 and 0 <= px < w - 1:
+                            depth = (math.sin(now * 0.8 + ci + j * 0.3) + 1) / 2
+                            if depth > 0.6: sa(stdscr, py, px, '◇', C[5])
+                            elif depth > 0.3: sa(stdscr, py, px, '·', C[1])
+                            else: sa(stdscr, py, px, '˙', C[2])
+                # Center jewel
+                sa(stdscr, ccy, ccx, '◆', C[5] | curses.A_BOLD)
+
+                # Aurora: 3 sine wave bands across upper area
+                for band in range(3):
+                    band_y = 3 + band * 2
+                    freq = 0.08 + band * 0.03
+                    phase = now * (0.6 + band * 0.4)
+                    bc = [C[6], C[5], C[1]][band]
+                    for x in range(2, w - 2):
+                        dy = math.sin(x * freq + phase) * 1.5
+                        ry = int(band_y + dy)
+                        if 0 <= ry < h - 1:
+                            brightness = (math.sin(x * 0.15 + phase * 1.3) + 1) / 2
+                            ch = '~' if brightness > 0.5 else '·'
+                            sa(stdscr, ry, x, ch, bc)
+
+            elif med_style_idx == 2:
+                # ── Lissajous: orbit ring particles + parametric trail ──
+                # Orbit rings: 3 rings of 8 particles each
+                for ring in range(3):
+                    r = 4 + ring * 3
+                    speed = 0.5 + ring * 0.3
+                    tilt = ring * 0.4
+                    rc = [C[5], C[1], C[2]][ring]
+                    rch = '◇' if ring == 0 else '·'
+                    for i in range(8):
+                        a = 2 * math.pi * i / 8 + now * speed
+                        ox = math.cos(a) * r * 2
+                        oy = math.sin(a) * r * math.cos(tilt)
+                        oz = math.sin(a) * r * math.sin(tilt)
+                        # simple depth fade
+                        f = 1.0 + oz * 0.1
+                        px = int(ccx + ox * f)
+                        py = int(ccy + oy * f)
+                        if 0 <= py < h - 1 and 0 <= px < w - 1:
+                            sa(stdscr, py, px, rch, rc | curses.A_BOLD)
+
+                # Lissajous trail: x=sin(at+d), y=sin(bt)
+                n_trail = 60
+                a_ratio = 3 + math.sin(now * 0.1) * 0.5
+                b_ratio = 2
+                delta = now * 0.3
+                lr = min(h // 3, w // 6)
+                for i in range(n_trail):
+                    t_param = i * 0.12
+                    lx = math.sin(a_ratio * t_param + delta)
+                    ly = math.sin(b_ratio * t_param)
+                    px = int(ccx + lx * lr * 2)
+                    py = int(ccy + ly * lr)
+                    if 0 <= py < h - 1 and 0 <= px < w - 1:
+                        age = i / n_trail
+                        if age < 0.3: sa(stdscr, py, px, '◆', C[5] | curses.A_BOLD)
+                        elif age < 0.6: sa(stdscr, py, px, '◇', C[1])
+                        else: sa(stdscr, py, px, '·', C[2])
 
             # Mode UI
             gy = h//2 + 4
@@ -548,11 +738,15 @@ def main(stdscr):
                     ctr(stdscr, gy+2, f"round {engine.rnd}/{engine.rnds}", C[2])
                 ctr(stdscr, gy+3, f"◇ {fmt(elapsed)}  ·  {breaths} cycles", C[1])
             else:
-                ctr(stdscr, 1, "M E D I T A T I O N", C[2])
+                style_name = MED_STYLES[med_style_idx]
+                ctr(stdscr, 1, f"M E D I T A T I O N  ·  {style_name}", C[2])
                 ctr(stdscr, gy+1, f"◇ {fmt(elapsed)}", C[1])
 
             ctr(stdscr, h-4, "● C L A U D E   I S   B U I L D I N G ●", C[6]|curses.A_BOLD)
-            ctr(stdscr, h-2, f"[t] {TECHNIQUES[tech_key]['short']}  [s] {'♪' if snd else '×'}  [←] menu  [q] quit", C[1]|curses.A_BOLD)
+            if user_mode == "breathing":
+                ctr(stdscr, h-2, f"[t] {TECHNIQUES[tech_key]['short']}  [s] {'♪' if snd else '×'}  [←] menu  [q] quit", C[1]|curses.A_BOLD)
+            else:
+                ctr(stdscr, h-2, f"[t] {MED_STYLES[med_style_idx]}  [s] {'♪' if snd else '×'}  [←] menu  [q] quit", C[1]|curses.A_BOLD)
 
         # ══════ IDLE STATE ══════
         elif state == "idle":
@@ -641,10 +835,14 @@ def main(stdscr):
                 ctr(stdscr, h-4, st, C[4])
 
             # Idle controls
-            mode_s = "breath" if user_mode == "breathing" else "meditate"
-            ctr(stdscr, h-2, f"[t] {TECHNIQUES[tech_key]['short']}  [s] {'♪' if snd else '×'}  [←] menu  [q] quit  ·  {mode_s}", C[1]|curses.A_BOLD)
-            sel = "  ".join(f"{'▸' if i==tech_idx else ' '}{k}" for i,k in enumerate(tech_keys))
-            ctr(stdscr, h-1, sel, C[2])
+            if user_mode == "breathing":
+                ctr(stdscr, h-2, f"[t] {TECHNIQUES[tech_key]['short']}  [s] {'♪' if snd else '×'}  [←] menu  [q] quit  ·  breath", C[1]|curses.A_BOLD)
+                sel = "  ".join(f"{'▸' if i==tech_idx else ' '}{k}" for i,k in enumerate(tech_keys))
+                ctr(stdscr, h-1, sel, C[2])
+            else:
+                ctr(stdscr, h-2, f"[t] {MED_STYLES[med_style_idx]}  [s] {'♪' if snd else '×'}  [←] menu  [q] quit  ·  meditate", C[1]|curses.A_BOLD)
+                sel = "  ".join(f"{'▸' if i==med_style_idx else ' '}{s}" for i,s in enumerate(MED_STYLES))
+                ctr(stdscr, h-1, sel, C[2])
 
         stdscr.refresh()
         time.sleep(0.05)
@@ -682,7 +880,7 @@ def install_hooks():
 
 
 if __name__ == "__main__":
-    p = argparse.ArgumentParser(description="B R E A T H E — meditation + journal")
+    p = argparse.ArgumentParser(description="b r e A I t h — meditation + journal")
     p.add_argument("--technique", choices=list(TECHNIQUES.keys()), help="Start with technique")
     p.add_argument("--silent", action="store_true", help="No sound")
     p.add_argument("--install-hooks", action="store_true", help="Install Claude Code hooks")
